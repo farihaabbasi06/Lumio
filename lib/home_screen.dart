@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'chat_screen.dart';
+import 'subject_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -66,6 +68,7 @@ class HomeScreen extends StatelessWidget {
               child: ListView(
                 children: [
                   subjectCard(
+                    context: context,
                     icon: Icons.computer,
                     color: Colors.deepPurple,
                     title: "Operating Systems",
@@ -75,6 +78,7 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(height: 15),
 
                   subjectCard(
+                    context: context,
                     icon: Icons.storage,
                     color: Colors.green,
                     title: "Database Systems",
@@ -84,6 +88,7 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(height: 15),
 
                   subjectCard(
+                    context: context,
                     icon: Icons.code,
                     color: Colors.orange,
                     title: "Web Technologies",
@@ -105,49 +110,63 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget subjectCard({
+    required BuildContext context,
     required IconData icon,
     required Color color,
     required String title,
     required String lectures,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: color,
-            child: Icon(icon, color: Colors.white),
-          ),
-
-          const SizedBox(width: 18),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                const SizedBox(height: 5),
-
-                Text(lectures, style: const TextStyle(color: Colors.grey)),
-              ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SubjectScreen()),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A2E),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: color,
+              child: Icon(icon, color: Colors.white),
             ),
-          ),
 
-          const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 18),
-        ],
+            const SizedBox(width: 18),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 5),
+
+                  Text(lectures, style: const TextStyle(color: Colors.grey)),
+                ],
+              ),
+            ),
+
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white54,
+              size: 18,
+            ),
+          ],
+        ),
       ),
     );
   }
