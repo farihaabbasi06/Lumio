@@ -7,115 +7,178 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'SlideAsk Pro',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const ExamPredictorScreen(), 
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+// === Exam Predictor Screen UI ===
+class ExamPredictorScreen extends StatefulWidget {
+  const ExamPredictorScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<ExamPredictorScreen> createState() => _ExamPredictorScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _ExamPredictorScreenState extends State<ExamPredictorScreen> {
+  final _formKey = GlobalKey<FormState>();
+  String _predictionResult = "";
+  bool _isAnalyzing = false;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  // Controllers to get text from inputs
+  final _topicController = TextEditingController();
+  final _attendanceController = TextEditingController();
+
+  void _predictExamQuestions() {
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isAnalyzing = true;
+      });
+
+      // Simulating AI analysis delay
+      Future.delayed(const Duration(seconds: 2), () {
+        setState(() {
+          _isAnalyzing = false;
+          _predictionResult = "🎯 Predicted High-Probability Topics for '${_topicController.text}':\n\n"
+              "1. Core Concepts & Definitions (85% Probability)\n"
+              "2. Practical Application & Case Studies (70% Probability)\n"
+              "3. Past Papers Repeated Patterns (65% Probability)\n\n"
+              "💡 Tip: Focus heavily on diagrams and lab implementation!";
+        });
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _topicController.dispose();
+    _attendanceController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
+        title: const Text('SlideAsk Pro - Exam Predictor'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        centerTitle: true,
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.psychology, size: 40, color: Colors.deepPurple),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            'Enter your study details below, and our AI will predict your exam focus areas!',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
+                // Subject / Topic Input
+                TextFormField(
+                  controller: _topicController,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject or Topic Name',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.book),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter a subject or topic';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Attendance / Preparation Level Input
+                TextFormField(
+                  controller: _attendanceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Your Preparation Level (1-100%)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.trending_up),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your preparation percentage';
+                    }
+                    final score = int.tryParse(value);
+                    if (score == null || score < 1 || score > 100) {
+                      return 'Enter a valid percentage between 1 and 100';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // Predict Button
+                ElevatedButton.icon(
+                  onPressed: _isAnalyzing ? null : _predictExamQuestions,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: _isAnalyzing 
+                      ? const SizedBox(
+                          width: 20, 
+                          height: 20, 
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                        )
+                      : const Icon(Icons.analytics),
+                  label: Text(_isAnalyzing ? 'Analyzing Data...' : 'Predict Exam Focus'),
+                ),
+                const SizedBox(height: 24),
+
+                // Result Display
+                if (_predictionResult.isNotEmpty)
+                  Card(
+                    color: Colors.deepPurple.withOpacity(0.05),
+                    shape: RoundedRectangleBorder(
+                      side: const BorderSide(color: Colors.deepPurple, width: 1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        _predictionResult,
+                        style: const TextStyle(fontSize: 15, height: 1.5),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
