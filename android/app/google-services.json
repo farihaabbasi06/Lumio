@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "301118828041",
+    "project_id": "lumio-b1831",
+    "storage_bucket": "lumio-b1831.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:301118828041:android:697dc7ef09cefa769592d8",
+        "android_client_info": {
+          "package_name": "com.example.lumio"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCVzUlx_fLxApIypPMghc_fW1PPt3Khnao"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
