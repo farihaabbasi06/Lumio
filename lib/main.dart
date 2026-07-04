@@ -3,7 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'screens/auth_screen.dart';
+
 
 void main() async {
   // Ensures all Flutter widgets are bound before initializing services
@@ -40,7 +40,7 @@ class MyApp extends StatelessWidget {
           }
 
           // If NOT logged in
-          return const AuthScreen();
+         // return const AuthScreen();
         },
       ),
     );
