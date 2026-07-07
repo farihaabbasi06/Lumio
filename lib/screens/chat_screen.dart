@@ -271,12 +271,36 @@ Widget build(BuildContext context) {
         ),
 
         // 2. BOTTOM CONTROL ROW PANEL INTERFACE
+   // 1. CHAT MESSAGE LIST STREAM AREA (Keep this as is)
+        Expanded(
+          child: _messages.isEmpty
+              ? const Center(child: Text("Ask anything about this document..."))
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _messages.length,
+                  itemBuilder: (context, index) {
+                    // ... your existing message bubble rendering code ...
+                  },
+                ),
+        ),
+
+        // 2. REPLACE ONLY THIS BOTTOM SECTION RIGHT HERE:
         Container(
           padding: const EdgeInsets.all(16),
           color: const Color(0xFF0D0D18),
           child: SafeArea(
             child: Row(
               children: [
+                // MICROPHONE ICON BUTTON
+                IconButton(
+                  icon: Icon(
+                    _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                    color: _isListening ? Colors.redAccent : Colors.grey,
+                  ),
+                  onPressed: () => _toggleListening(slideText),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
