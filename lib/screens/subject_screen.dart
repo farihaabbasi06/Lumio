@@ -1,16 +1,16 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
-
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 
 class SubjectScreen extends StatelessWidget {
   const SubjectScreen({super.key});
 
-  // Reusing your exact dark purple neon palette colors
   static const backgroundColor = Color(0xFF0D0D18);
   static const cardColor = Color(0xFF1A1A2E);
   static const primaryPurple = Color(0xFF534AB7);
@@ -20,7 +20,6 @@ class SubjectScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Catch arguments passed during navigation route changes
     final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
     final String subjectId = args['subjectId'] ?? '';
     final String subjectName = args['subjectName'] ?? 'Subject View';
@@ -45,7 +44,6 @@ class SubjectScreen extends StatelessWidget {
             .where('subjectId', isEqualTo: subjectId)
             .snapshots(),
         builder: (context, snapshot) {
-          // Calculate dynamic statistics based on real-time stream state
           int lectureCount = 0;
           int totalSlides = 0;
           List<DocumentSnapshot> lectureDocs = [];
@@ -53,12 +51,10 @@ class SubjectScreen extends StatelessWidget {
           if (snapshot.hasData) {
             lectureDocs = snapshot.data!.docs;
             lectureCount = lectureDocs.length;
-            
-            // Extract the slide counts safely from the description/summary fields
             for (var doc in lectureDocs) {
               final data = doc.data() as Map<String, dynamic>;
               final String summary = data['summary'] ?? '';
-              final match = RegExp(r'(\d+)\s+slides').firstMatch(summary);
+              final match = RegExp(r'(\d+)\s+(?:slides|pages)').firstMatch(summary);
               if (match != null) {
                 totalSlides += int.parse(match.group(1)!);
               }
@@ -70,7 +66,6 @@ class SubjectScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. STATS ROW - Updated to display dynamic database details
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
@@ -87,7 +82,6 @@ class SubjectScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // 2. STUDY ENTIRE SUBJECT INTERACTIVE AI CARD
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -111,9 +105,11 @@ class SubjectScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Study entire subject with AI', style: TextStyle(color: Color(0xFFAFA9EC), fontWeight: FontWeight.bold, fontSize: 13)),
+                            Text('Study entire subject with AI',
+                                style: TextStyle(color: Color(0xFFAFA9EC), fontWeight: FontWeight.bold, fontSize: 13)),
                             SizedBox(height: 2),
-                            Text('Ask questions across all lectures', style: TextStyle(color: primaryPurple, fontSize: 11)),
+                            Text('Ask questions across all lectures',
+                                style: TextStyle(color: primaryPurple, fontSize: 11)),
                           ],
                         ),
                       ),
@@ -123,14 +119,12 @@ class SubjectScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // 3. LECTURES HEADER SECTION LABEL
                 const Text(
                   'LECTURES',
                   style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                 ),
                 const SizedBox(height: 12),
 
-                // 1. ADD UPLOAD LECTURE BUTTON
                 GestureDetector(
                   onTap: () => _pickAndProcessPdf(context, subjectId),
                   child: Container(
@@ -156,7 +150,8 @@ class SubjectScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Upload new lecture', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text('Upload new lecture',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                               SizedBox(height: 2),
                               Text('PDF files up to 50MB', style: TextStyle(color: Colors.grey, fontSize: 11)),
                             ],
@@ -169,7 +164,6 @@ class SubjectScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // 4. LECTURES LIST VIEW INTERACTION AREA
                 if (snapshot.connectionState == ConnectionState.waiting)
                   const Center(child: CircularProgressIndicator(color: primaryPurple))
                 else if (lectureDocs.isEmpty)
@@ -201,13 +195,14 @@ class SubjectScreen extends StatelessWidget {
                           leading: CircleAvatar(
                             backgroundColor: const Color(0xFF252542),
                             foregroundColor: primaryPurple,
-                            child: Text('L${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            child: Text('L${index + 1}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           ),
-                          title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                          title: Text(title,
+                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
                           subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
                           trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
                           onTap: () {
-                            // Route parameters forwarding down to the individual chat interface section next
                             Navigator.pushNamed(
                               context,
                               '/lecture-detail',
@@ -230,27 +225,63 @@ class SubjectScreen extends StatelessWidget {
     );
   }
 
+  // FIXED: replaced google_generative_ai vision with direct HTTP call
+  Future<String> _extractTextViaHTTP(Uint8List fileBytes) async {
+    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey',
+    );
+
+    final base64Pdf = base64Encode(fileBytes);
+
+    final body = jsonEncode({
+      "contents": [
+        {
+          "parts": [
+            {"text": "Extract and transcribe all text content visible in this document. Do not summarize, just output the raw text found."},
+            {
+              "inline_data": {
+                "mime_type": "application/pdf",
+                "data": base64Pdf
+              }
+            }
+          ]
+        }
+      ]
+    });
+
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: body,
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '';
+    }
+    return '';
+  }
+
   Future<void> _pickAndProcessPdf(BuildContext context, String subjectId) async {
     try {
-     // To this (static method call without .platform):
-FilePickerResult? result = await FilePicker.pickFiles(
-  type: FileType.custom,
-  allowedExtensions: ['pdf'],
-  withData: true,
-);
+      FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: true,
+      );
 
-      if (result == null || result.files.single.path == null) return;
+      if (result == null || result.files.single.bytes == null) return;
 
       String fileName = result.files.single.name;
-      File file = File(result.files.single.path!);
-      Uint8List? fileBytes = result.files.single.bytes ?? await file.readAsBytes();
+      Uint8List fileBytes = result.files.single.bytes!;
 
       if (!context.mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => WillPopScope(
-          onWillPop: () async => false,
+        builder: (context) => PopScope(
+          canPop: false,
           child: const AlertDialog(
             backgroundColor: Color(0xFF1A1A2E),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
@@ -259,20 +290,18 @@ FilePickerResult? result = await FilePicker.pickFiles(
               children: [
                 CircularProgressIndicator(color: primaryPurple),
                 SizedBox(height: 20),
-                Text("Reading your slides...", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Text("Reading your slides...",
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 SizedBox(height: 6),
-                Text("Extracting contents & archiving to cloud", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                Text("AI is scanning your document...",
+                    style: TextStyle(color: Colors.grey, fontSize: 12)),
               ],
             ),
           ),
         ),
       );
 
-      Reference storageRef = FirebaseStorage.instance.ref().child('lectures/$subjectId/$fileName');
-      UploadTask uploadTask = storageRef.putFile(file);
-      TaskSnapshot snapshot = await uploadTask;
-      String downloadUrl = await snapshot.ref.getDownloadURL();
-
+      // Extract text using syncfusion first
       PdfDocument document = PdfDocument(inputBytes: fileBytes);
       String bigCombinedText = "";
 
@@ -283,11 +312,16 @@ FilePickerResult? result = await FilePicker.pickFiles(
       int totalPagesCount = document.pages.count;
       document.dispose();
 
+      // FIXED: if text is empty use direct HTTP instead of google_generative_ai package
+      if (bigCombinedText.trim().isEmpty) {
+        bigCombinedText = await _extractTextViaHTTP(fileBytes);
+      }
+
       await FirebaseFirestore.instance.collection('lectures').add({
         'subjectId': subjectId,
         'title': fileName.replaceAll('.pdf', ''),
-        'summary': '$totalPagesCount slides extracted successfully',
-        'pdfUrl': downloadUrl,
+        'summary': '$totalPagesCount pages processed',
+        'pdfUrl': '',
         'slideText': bigCombinedText,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -296,15 +330,15 @@ FilePickerResult? result = await FilePicker.pickFiles(
       Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lecture added and indexed successfully!')),
+        const SnackBar(content: Text('Lecture uploaded successfully!')),
       );
-
     } catch (e) {
-      if (Navigator.canPop(context)) Navigator.pop(context);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.redAccent),
-      );
+      if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
