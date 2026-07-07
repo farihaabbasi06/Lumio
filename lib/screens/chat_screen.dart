@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/gemini_service.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -55,6 +56,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
     _chatController.clear();
     _isAiTyping = true;
+    final stt.SpeechToText _speech = stt.SpeechToText();
+bool _isListening = false;
+String _currentLocaleId = 'en_US'; // Default language setting
     
     // 2. Insert a temporary message representing the typing indicator state
     _messages.add({
