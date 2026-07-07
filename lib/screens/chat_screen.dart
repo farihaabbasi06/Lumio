@@ -9,6 +9,8 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
+
+
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final List<Map<String, dynamic>> _messages = [];
   final TextEditingController _chatController = TextEditingController();
@@ -16,6 +18,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final GeminiService _geminiService = GeminiService();
   
   bool _isAiTyping = false;
+
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  String _currentLocaleId = 'ur_PK';
 
   // Custom Dark Theme Palette
   static const backgroundColor = Color(0xFF0D0D18);
@@ -43,6 +49,47 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
+  void _toggleListening(String slideText) async {
+  if (!_isListening) {
+    // 1. Initialize the speech service and request microphone permission
+    bool available = await _speech.initialize(
+      onStatus: (status) {
+        if (status == 'notListening' || status == 'done') {
+          setState(() => _isListening = false);
+          // Auto-send to Gemini when the user stops speaking
+          final textToSend = _chatController.text.trim();
+          if (textToSend.isNotEmpty) {
+            _sendMessage(slideText);
+          }
+        }
+      },
+      onError: (errorNotification) => setState(() => _isListening = false),
+    );
+
+    if (available) {
+      setState(() => _isListening = true);
+      
+      // 2. Start listening with both English and Urdu localization fallback strings
+      await _speech.listen(
+        onResult: (result) {
+          setState(() {
+            _chatController.text = result.recognizedWords;
+          });
+        },
+        // 'ur_PK' captures Urdu voice phrasing; 'en_US' captures English.
+        // Using a dual/flexible string configuration or explicit Urdu locale:
+        localeId: 'ur_PK', 
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+      );
+    }
+  } else {
+    // 3. Manually stop listening if the mic button is tapped while active
+    await _speech.stop();
+    setState(() => _isListening = false);
+  }
+}
+
   void _sendMessage(String slideText) async {
   final userQuery = _chatController.text.trim();
   if (userQuery.isEmpty || _isAiTyping) return;
@@ -56,9 +103,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
     _chatController.clear();
     _isAiTyping = true;
-    final stt.SpeechToText _speech = stt.SpeechToText();
-bool _isListening = false;
-String _currentLocaleId = 'en_US'; // Default language setting
+    
+    // final stt.SpeechToText _speech = stt.SpeechToText();
+    // bool _isListening = false;
+    // String _currentLocaleId = 'en_US'; // Default language setting
     
     // 2. Insert a temporary message representing the typing indicator state
     _messages.add({
