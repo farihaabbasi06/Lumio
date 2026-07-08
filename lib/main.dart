@@ -10,6 +10,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'screens/flashcard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,6 +47,7 @@ class MyApp extends StatelessWidget {
         '/lecture-detail': (context) => const LectureDetailScreen(),
         '/subject-detail': (context) => const SubjectScreen(),
         '/chat': (context) => const ChatScreen(), // <-- 2. ADD THIS PATH MAP LINE
+        '/flashcards': (context) => const FlashcardScreen(),
       },
     );
   }

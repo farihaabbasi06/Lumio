@@ -68,20 +68,48 @@ class SubjectScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 1.6,
-                  children: [
-                    _buildStatCard('$lectureCount', 'Lectures', primaryPurple),
-                    _buildStatCard(totalSlides > 0 ? '$totalSlides' : '0', 'Slides', accentNeon),
-                    _buildStatCard('0', 'Flashcards', orangeWarn),
-                    _buildStatCard('0', 'Weak spots', const Color(0xFFE24B4A)),
-                  ],
-                ),
+               GridView.count(
+  crossAxisCount: 2,
+  shrinkWrap: true,
+  physics: const NeverScrollableScrollPhysics(),
+  crossAxisSpacing: 10,
+  mainAxisSpacing: 10,
+  childAspectRatio: 1.6,
+  children: [
+    _buildStatCard('$lectureCount', 'Lectures', primaryPurple),
+    _buildStatCard(totalSlides > 0 ? '$totalSlides' : '0', 'Slides', accentNeon),
+    
+    // UPDATED INTERACTIVE FLASHCARD CARD
+    GestureDetector(
+      onTap: lectureDocs.isNotEmpty
+          ? () {
+              // Open the flashcard deck using the latest uploaded lecture
+              final latestDoc = lectureDocs.first;
+              final latestData = latestDoc.data() as Map<String, dynamic>;
+              Navigator.pushNamed(
+                context,
+                '/flashcards',
+                arguments: {
+                  'lectureId': latestDoc.id,
+                  'lectureTitle': latestData['title'] ?? 'Lecture',
+                },
+              );
+            }
+          : () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Upload a lecture first to generate flashcards!')),
+              );
+            },
+      child: _buildStatCard(
+        lectureDocs.isNotEmpty ? 'Review' : '0', 
+        'Flashcards', 
+        orangeWarn,
+      ),
+    ),
+    
+    _buildStatCard('0', 'Weak spots', const Color(0xFFE24B4A)),
+  ],
+),
                 const SizedBox(height: 16),
 
                 Container(
