@@ -6,8 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class GeminiService {
   static const int dailyLimit = 20;
 
-  // Direct HTTP call — works with any Gemini API key format including AQ. keys
+  // Direct HTTP call — safely extracts your key from the .env file variable pool
   Future<String> _callGeminiAPI(String prompt) async {
+    // This looks up your .env file key directly
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
 
     final url = Uri.parse(
@@ -31,16 +32,55 @@ class GeminiService {
     );
 
     if (response.statusCode == 200) {
-  final data = jsonDecode(response.body);
-  final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'];
-  return text ?? "The AI could not generate an answer.";
-} else {
-  print("Status Code: ${response.statusCode}");
-  print("Response Body: ${response.body}");
+      final data = jsonDecode(response.body);
+      final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'];
+      return text ?? "The AI could not generate an answer.";
+    } else {
+      print("Status Code: ${response.statusCode}");
+      print("Response Body: ${response.body}");
 
-  final error = jsonDecode(response.body);
-  return "API Error: ${error['error']['message']}";
-}
+      final error = jsonDecode(response.body);
+      return "API Error: ${error['error']['message']}";
+    }
+  }
+
+  // Generate structured Flashcards JSON array from text extraction
+  Future<String> generateFlashcards(String slideText) async {
+    if (slideText.trim().isEmpty) {
+      return '[]';
+    }
+
+    final prompt = """
+From these lecture slides generate exactly 10 flashcards. 
+Return ONLY a valid JSON array like the example below. Do not include markdown code block formatting (like ```json or ```), no conversational intros, and no extra text.
+
+Example Format:
+[
+  {"question": "What is the primary topic of Slide 1?", "answer": "The core concept definition."},
+  {"question": "Explain the secondary point outlined in the text.", "answer": "The step-by-step process details."}
+]
+
+Lecture Content:
+$slideText
+""";
+
+    try {
+      final rawResponse = await _callGeminiAPI(prompt);
+      
+      String cleanResponse = rawResponse.trim();
+      
+      // Clean up code blocks if Gemini ignores the prompt instruction and wraps it anyway
+      if (cleanResponse.contains('```')) {
+        cleanResponse = cleanResponse
+            .replaceAll(RegExp(r'```json|```'), '')
+            .trim();
+      }
+      
+      return cleanResponse;
+    } catch (e) {
+      print("Error generating flashcards: $e");
+      return '[]';
+    }
   }
 
   Future<int> getTodayCount() async {

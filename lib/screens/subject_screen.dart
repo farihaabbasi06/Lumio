@@ -7,6 +7,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:hive_flutter/hive_flutter.dart'; // Import Hive for local offline caching
+import '../services/gemini_service.dart';     // Import your custom Gemini service
 
 class SubjectScreen extends StatelessWidget {
   const SubjectScreen({super.key});
@@ -205,7 +207,7 @@ class SubjectScreen extends StatelessWidget {
                           onTap: () {
                             Navigator.pushNamed(
                               context,
-                              '/lecture-detail',
+                              '/chat',
                               arguments: {
                                 'lectureId': doc.id,
                                 'lectureTitle': title,
@@ -225,7 +227,6 @@ class SubjectScreen extends StatelessWidget {
     );
   }
 
-  // FIXED: replaced google_generative_ai vision with direct HTTP call
   Future<String> _extractTextViaHTTP(Uint8List fileBytes) async {
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
     final url = Uri.parse(
@@ -261,6 +262,45 @@ class SubjectScreen extends StatelessWidget {
       return data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '';
     }
     return '';
+  }
+
+  // INTEGRATED BACKGROUND TASK: Processes AI flashcards, writes to Hive box, commits to Firestore
+  Future<void> _generateAndSaveFlashcardsBackground(String lectureId, String slideText) async {
+    if (slideText.trim().isEmpty) return;
+    
+    final GeminiService geminiService = GeminiService();
+
+    try {
+      print("Starting background automated flashcard generation pipeline...");
+      
+      // 1. Fetch JSON string map via Gemini service instructions
+      String jsonString = await geminiService.generateFlashcards(slideText);
+
+      // 2. Save directly into a local box using lectureId as key
+      var box = await Hive.openBox('flashcards');
+      await box.put(lectureId, jsonString);
+
+      // 3. Parse JSON array list payload items
+      final List<dynamic> flashcardList = jsonDecode(jsonString);
+      final firestore = FirebaseFirestore.instance;
+      WriteBatch batch = firestore.batch();
+
+      for (var card in flashcardList) {
+        DocumentReference docRef = firestore.collection('flashcards').doc();
+        batch.set(docRef, {
+          'lectureId': lectureId,
+          'question': card['question'] ?? 'No question text generated.',
+          'answer': card['answer'] ?? 'No answer text generated.',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Execute batch network database storage write 
+      await batch.commit();
+      print("Flashcard cloud syncing pipeline completed successfully!");
+    } catch (e) {
+      print("Background flashcard generator execution failure error: $e");
+    }
   }
 
   Future<void> _pickAndProcessPdf(BuildContext context, String subjectId) async {
@@ -301,7 +341,6 @@ class SubjectScreen extends StatelessWidget {
         ),
       );
 
-      // Extract text using syncfusion first
       PdfDocument document = PdfDocument(inputBytes: fileBytes);
       String bigCombinedText = "";
 
@@ -312,12 +351,12 @@ class SubjectScreen extends StatelessWidget {
       int totalPagesCount = document.pages.count;
       document.dispose();
 
-      // FIXED: if text is empty use direct HTTP instead of google_generative_ai package
       if (bigCombinedText.trim().isEmpty) {
         bigCombinedText = await _extractTextViaHTTP(fileBytes);
       }
 
-      await FirebaseFirestore.instance.collection('lectures').add({
+      // Save document data to firestore and grab the generated doc reference id
+      DocumentReference lectureDocRef = await FirebaseFirestore.instance.collection('lectures').add({
         'subjectId': subjectId,
         'title': fileName.replaceAll('.pdf', ''),
         'summary': '$totalPagesCount pages processed',
@@ -326,11 +365,15 @@ class SubjectScreen extends StatelessWidget {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      // TRIGGER FLASHCARD GENERATION CHAIN RIGHT HERE IN THE BACKGROUND
+      // This will run asynchronously without making the user wait at the loading dialog!
+      _generateAndSaveFlashcardsBackground(lectureDocRef.id, bigCombinedText);
+
       if (!context.mounted) return;
       Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lecture uploaded successfully!')),
+        const SnackBar(content: Text('Lecture uploaded successfully! Flashcards generating...')),
       );
     } catch (e) {
       if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);

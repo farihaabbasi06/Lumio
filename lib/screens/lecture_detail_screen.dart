@@ -26,7 +26,7 @@ class _LectureDetailScreenState extends State<LectureDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _resetCounterForTesting();
+   // _resetCounterForTesting();
     // FIX 2: load how many questions are left today when screen opens
     _loadQuestionsLeft();
   }

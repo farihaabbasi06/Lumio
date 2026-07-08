@@ -9,21 +9,22 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-
-
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final List<Map<String, dynamic>> _messages = [];
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final GeminiService _geminiService = GeminiService();
-  
+
   bool _isAiTyping = false;
 
+  // Speech to Text configuration variables
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
-  String _currentLocaleId = 'ur_PK';
 
-  // Custom Dark Theme Palette
+  // NEW: user-selectable language for speech recognition. Defaults to English.
+  String _currentLocaleId = 'en_US';
+
+  // Custom Dark Theme Palette Colors
   static const backgroundColor = Color(0xFF0D0D18);
   static const cardColor = Color(0xFF1A1A2E);
   static const primaryPurple = Color(0xFF534AB7);
@@ -49,296 +50,307 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _toggleListening(String slideText) async {
-  if (!_isListening) {
-    // 1. Initialize the speech service and request microphone permission
-    bool available = await _speech.initialize(
-      onStatus: (status) {
-        if (status == 'notListening' || status == 'done') {
-          setState(() => _isListening = false);
-          // Auto-send to Gemini when the user stops speaking
-          final textToSend = _chatController.text.trim();
-          if (textToSend.isNotEmpty) {
-            _sendMessage(slideText);
-          }
-        }
-      },
-      onError: (errorNotification) => setState(() => _isListening = false),
-    );
-
-    if (available) {
-      setState(() => _isListening = true);
-      
-      // 2. Start listening with both English and Urdu localization fallback strings
-      await _speech.listen(
-        onResult: (result) {
-          setState(() {
-            _chatController.text = result.recognizedWords;
-          });
-        },
-        // 'ur_PK' captures Urdu voice phrasing; 'en_US' captures English.
-        // Using a dual/flexible string configuration or explicit Urdu locale:
-        localeId: 'ur_PK', 
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 3),
-      );
-    }
-  } else {
-    // 3. Manually stop listening if the mic button is tapped while active
-    await _speech.stop();
-    setState(() => _isListening = false);
+  // NEW: lets the user switch between English and Urdu recognition.
+  // Blocked while actively listening to avoid switching languages mid-speech.
+  void _toggleLanguage() {
+    if (_isListening) return;
+    setState(() {
+      _currentLocaleId = _currentLocaleId == 'en_US' ? 'ur_PK' : 'en_US';
+    });
   }
-}
+
+  void _toggleListening(String slideText) async {
+    if (!_isListening) {
+      // 1. Initialize the speech service and request microphone permission
+      bool available = await _speech.initialize(
+        onStatus: (status) {
+          if (status == 'notListening' || status == 'done') {
+            setState(() => _isListening = false);
+            // Auto-send to Gemini when the user stops speaking
+            final textToSend = _chatController.text.trim();
+            if (textToSend.isNotEmpty) {
+              _sendMessage(slideText);
+            }
+          }
+        },
+        onError: (errorNotification) => setState(() => _isListening = false),
+      );
+
+      if (available) {
+        setState(() => _isListening = true);
+
+        // 2. Start listening using whichever language the user picked
+        await _speech.listen(
+          onResult: (result) {
+            setState(() {
+              _chatController.text = result.recognizedWords;
+            });
+          },
+          localeId: _currentLocaleId,
+          listenFor: const Duration(seconds: 30),
+          pauseFor: const Duration(seconds: 3),
+        );
+      }
+    } else {
+      // 3. Manually stop listening if the mic button is tapped while active
+      await _speech.stop();
+      setState(() => _isListening = false);
+    }
+  }
 
   void _sendMessage(String slideText) async {
-  final userQuery = _chatController.text.trim();
-  if (userQuery.isEmpty || _isAiTyping) return;
+    final userQuery = _chatController.text.trim();
+    if (userQuery.isEmpty || _isAiTyping) return;
 
-  // 1. Clear textfield and post User Message immediately
-  setState(() {
-    _messages.add({
-      'sender': 'user',
-      'text': userQuery,
-      'isTyping': false,
+    // 1. Clear textfield and post User Message immediately
+    setState(() {
+      _messages.add({
+        'sender': 'user',
+        'text': userQuery,
+        'isTyping': false,
+      });
+      _chatController.clear();
+      _isAiTyping = true;
+
+      // 2. Insert a temporary message representing the typing indicator state
+      _messages.add({
+        'sender': 'ai',
+        'text': '',
+        'isTyping': true,
+      });
     });
-    _chatController.clear();
-    _isAiTyping = true;
-    
-    // final stt.SpeechToText _speech = stt.SpeechToText();
-    // bool _isListening = false;
-    // String _currentLocaleId = 'en_US'; // Default language setting
-    
-    // 2. Insert a temporary message representing the typing indicator state
-    _messages.add({
-      'sender': 'ai',
-      'text': '',
-      'isTyping': true,
-    });
-  });
-  _scrollToBottom();
+    _scrollToBottom();
 
-  try {
-    // 3. Dispatch text data payload to your Gemini Service instance
-    final rawAiResponse = await _geminiService.askQuestion(slideText, userQuery);
+    try {
+      // 3. Dispatch text data payload to your Gemini Service instance
+      final rawAiResponse = await _geminiService.askQuestion(slideText, userQuery);
 
-    // 4. Regex Parser: Extract mentions of slide or page numbers (e.g. "slide 4" or "page 12")
-    String? extractedSlideNumber;
-    final regExp = RegExp(r'(?:slide|page)\s*(\d+)', caseSensitive: false);
-    final match = regExp.firstMatch(rawAiResponse);
-    if (match != null) {
-      extractedSlideNumber = match.group(1);
+      // 4. Regex Parser: Extract mentions of slide or page numbers
+      String? extractedSlideNumber;
+      final regExp = RegExp(r'(?:slide|page)\s*(\d+)', caseSensitive: false);
+      final match = regExp.firstMatch(rawAiResponse);
+      if (match != null) {
+        extractedSlideNumber = match.group(1);
+      }
+
+      // 5. Remove typing element and insert authentic AI response payload
+      setState(() {
+        _messages.removeLast(); // Drops the typing bubble
+        _messages.add({
+          'sender': 'ai',
+          'text': rawAiResponse,
+          'isTyping': false,
+          'slideNumber': extractedSlideNumber,
+        });
+        _isAiTyping = false;
+      });
+    } catch (e) {
+      setState(() {
+        _messages.removeLast();
+        _messages.add({
+          'sender': 'ai',
+          'text': "Sorry, I encountered an issue retrieving the response. Please try again.",
+          'isTyping': false,
+        });
+        _isAiTyping = false;
+      });
     }
-
-    // 5. Remove the temporary typing element and insert the authentic AI response payload
-    setState(() {
-      _messages.removeLast(); // Drops the typing bubble
-      _messages.add({
-        'sender': 'ai',
-        'text': rawAiResponse,
-        'isTyping': false,
-        'slideNumber': extractedSlideNumber,
-      });
-      _isAiTyping = false;
-    });
-  } catch (e) {
-    setState(() {
-      _messages.removeLast();
-      _messages.add({
-        'sender': 'ai',
-        'text': "Sorry, I encountered an issue retrieving the response. Please try again.",
-        'isTyping': false,
-      });
-      _isAiTyping = false;
-    });
+    _scrollToBottom();
   }
-  _scrollToBottom();
-}
 
- @override
-Widget build(BuildContext context) {
-  // Catch passed dynamic bundle string references from navigation parameters
-  final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-  final String lectureTitle = args['lectureTitle'] ?? 'Document Chat';
-  final String slideText = args['slideText'] ?? '';
+  @override
+  Widget build(BuildContext context) {
+    // Catch passed dynamic bundle string references from navigation parameters
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final String lectureTitle = args['lectureTitle'] ?? 'Document Chat';
+    final String slideText = args['slideText'] ?? '';
 
-  return Scaffold(
-    backgroundColor: backgroundColor,
-    appBar: AppBar(
-      backgroundColor: const Color(0xFF131324),
-      elevation: 0,
-      title: Text(
-        lectureTitle,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF131324),
+        elevation: 0,
+        title: Text(
+          lectureTitle,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.grey),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back_rounded, color: Colors.grey),
-        onPressed: () => Navigator.pop(context),
-      ),
-    ),
-    body: Column(
-      children: [
-        // 1. CHAT MESSAGE LIST STREAM AREA
-        Expanded(
-          child: _messages.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.chat_bubble_outline_rounded, size: 44, color: primaryPurple.withAlpha(120)),
-                      const SizedBox(height: 12),
-                      const Text("Ask anything about this document...", style: TextStyle(color: Colors.grey, fontSize: 13)),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = _messages[index];
-                    final isUser = msg['sender'] == 'user';
+      body: Column(
+        children: [
+          // 1. CHAT MESSAGE LIST STREAM AREA
+          Expanded(
+            child: _messages.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.chat_bubble_outline_rounded, size: 44, color: primaryPurple.withAlpha(120)),
+                        const SizedBox(height: 12),
+                        const Text("Ask anything about this document...", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = _messages[index];
+                      final isUser = msg['sender'] == 'user';
 
-                    if (isUser) {
-                      return Align(
-                        alignment: Alignment.centerRight,
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 14, left: 50),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: const BoxDecoration(
-                            color: primaryPurple,
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(16),
-                              topRight: Radius.circular(16),
-                              bottomLeft: Radius.circular(16),
+                      if (isUser) {
+                        return Align(
+                          alignment: Alignment.centerRight,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 14, left: 50),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: const BoxDecoration(
+                              color: primaryPurple,
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(16),
+                                topRight: Radius.circular(16),
+                                bottomLeft: Radius.circular(16),
+                              ),
+                            ),
+                            child: Text(msg['text'], style: const TextStyle(color: textPurple, fontSize: 14)),
+                          ),
+                        );
+                      } else {
+                        // AI Bubble Layout
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 14, right: 50),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: const BoxDecoration(
+                                    color: cardColor,
+                                    borderRadius: BorderRadius.only(
+                                      topRight: Radius.circular(16),
+                                      bottomLeft: Radius.circular(16),
+                                      bottomRight: Radius.circular(16),
+                                    ),
+                                  ),
+                                  child: msg['isTyping']
+                                      ? const SizedBox(width: 40, height: 20, child: Center(child: TypingIndicator()))
+                                      : Text(msg['text'], style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                ),
+                                // DYNAMIC CHIP CONDITIONAL INJECTION
+                                if (!msg['isTyping'] && msg['slideNumber'] != null) ...[
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF162525),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFF1D453B), width: 0.5),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.bookmark_outline_rounded, color: accentNeon, size: 12),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Slide ${msg['slideNumber']}',
+                                          style: const TextStyle(color: accentNeon, fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ]
+                              ],
                             ),
                           ),
-                          child: Text(msg['text'], style: const TextStyle(color: textPurple, fontSize: 14)),
-                        ),
-                      );
-                    } else {
-                      // AI Bubble Layout
-                      return Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 14, right: 50),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: const BoxDecoration(
-                                  color: cardColor,
-                                  borderRadius: BorderRadius.only(
-                                    topRight: Radius.circular(16),
-                                    bottomLeft: Radius.circular(16),
-                                    bottomRight: Radius.circular(16),
-                                  ),
-                                ),
-                                child: msg['isTyping']
-                                    ? const SizedBox(width: 40, height: 20, child: Center(child: TypingIndicator()))
-                                    : Text(msg['text'], style: const TextStyle(color: Colors.white, fontSize: 14)),
-                              ),
-                              // DYNAMIC CHIP CONDITIONAL INJECTION
-                              if (!msg['isTyping'] && msg['slideNumber'] != null) ...[
-                                const SizedBox(height: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF162525),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: const Color(0xFF1D453B), width: 0.5),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.bookmark_outline_rounded, color: accentNeon, size: 12),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Slide ${msg['slideNumber']}',
-                                        style: const TextStyle(color: accentNeon, fontSize: 11, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ]
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                ),
-        ),
-
-        // 2. BOTTOM CONTROL ROW PANEL INTERFACE
-   // 1. CHAT MESSAGE LIST STREAM AREA (Keep this as is)
-        Expanded(
-          child: _messages.isEmpty
-              ? const Center(child: Text("Ask anything about this document..."))
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _messages.length,
-                  itemBuilder: (context, index) {
-                    // ... your existing message bubble rendering code ...
-                  },
-                ),
-        ),
-
-        // 2. REPLACE ONLY THIS BOTTOM SECTION RIGHT HERE:
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: const Color(0xFF0D0D18),
-          child: SafeArea(
-            child: Row(
-              children: [
-                // MICROPHONE ICON BUTTON
-                IconButton(
-                  icon: Icon(
-                    _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                    color: _isListening ? Colors.redAccent : Colors.grey,
+                        );
+                      }
+                    },
                   ),
-                  onPressed: () => _toggleListening(slideText),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E2E),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: TextField(
-                      controller: _chatController,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: const InputDecoration(
-                        hintText: 'Ask a question...',
-                        hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                        border: InputBorder.none,
+          ),
+
+          // 2. BOTTOM CONTROL ROW PANEL INTERFACE WITH VOICE INPUT + LANGUAGE TOGGLE
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: const Color(0xFF0D0D18),
+            child: SafeArea(
+              child: Row(
+                children: [
+                  // NEW: LANGUAGE TOGGLE BUTTON (EN / UR)
+                  GestureDetector(
+                    onTap: _toggleLanguage,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E2E),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF3C3489), width: 0.5),
                       ),
-                      onSubmitted: (_) => _sendMessage(slideText),
+                      child: Text(
+                        _currentLocaleId == 'en_US' ? 'EN' : 'UR',
+                        style: const TextStyle(
+                          color: textPurple,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: () => _sendMessage(slideText),
-                  child: const CircleAvatar(
-                    radius: 22,
-                    backgroundColor: primaryPurple,
-                    child: Icon(Icons.send_rounded, size: 18, color: Colors.white),
+                  const SizedBox(width: 8),
+
+                  // MICROPHONE ICON BUTTON
+                  IconButton(
+                    icon: Icon(
+                      _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                      color: _isListening ? Colors.redAccent : Colors.grey,
+                    ),
+                    onPressed: () => _toggleListening(slideText),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E2E),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: TextField(
+                        controller: _chatController,
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        decoration: const InputDecoration(
+                          hintText: 'Ask a question...',
+                          hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          border: InputBorder.none,
+                        ),
+                        onSubmitted: (_) => _sendMessage(slideText),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => _sendMessage(slideText),
+                    child: const CircleAvatar(
+                      radius: 22,
+                      backgroundColor: primaryPurple,
+                      child: Icon(Icons.send_rounded, size: 18, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 }
 
+// Separate Class for the Fluid Typing Dot Oscillator Animation Component
 class TypingIndicator extends StatefulWidget {
   const TypingIndicator({super.key});
 
@@ -368,11 +380,10 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
     return AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
-        // Create an offset delay for each individual dot's pulse phase
         double delay = index * 0.2;
         double progress = (_animationController.value - delay) % 1.0;
         double targetValue = (progress < 0.5) ? progress * 2 : (1.0 - progress) * 2;
-        
+
         return Opacity(
           opacity: 0.3 + (targetValue.clamp(0.0, 1.0) * 0.7),
           child: Container(

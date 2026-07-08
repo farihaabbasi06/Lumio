@@ -5,21 +5,24 @@ import 'screens/auth/signup_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/subject_screen.dart';
 import 'screens/lecture_detail_screen.dart';
+import 'screens/chat_screen.dart'; // <-- 1. ADD THIS CHAT SCREEN IMPORT RIGHT HERE
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
- void main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
+
+  await Hive.initFlutter();
   //await Firebase.initializeApp();
   await Firebase.initializeApp(
-  options: DefaultFirebaseOptions.currentPlatform,
-);
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   await SharedPreferences.getInstance(); // add this line
   runApp(const MyApp());
 }
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -42,6 +45,7 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/lecture-detail': (context) => const LectureDetailScreen(),
         '/subject-detail': (context) => const SubjectScreen(),
+        '/chat': (context) => const ChatScreen(), // <-- 2. ADD THIS PATH MAP LINE
       },
     );
   }
