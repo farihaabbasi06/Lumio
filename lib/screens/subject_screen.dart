@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -79,11 +80,10 @@ class SubjectScreen extends StatelessWidget {
     _buildStatCard('$lectureCount', 'Lectures', primaryPurple),
     _buildStatCard(totalSlides > 0 ? '$totalSlides' : '0', 'Slides', accentNeon),
     
-    // UPDATED INTERACTIVE FLASHCARD CARD
+    // 1. INTERACTIVE FLASHCARD CARD
     GestureDetector(
       onTap: lectureDocs.isNotEmpty
           ? () {
-              // Open the flashcard deck using the latest uploaded lecture
               final latestDoc = lectureDocs.first;
               final latestData = latestDoc.data() as Map<String, dynamic>;
               Navigator.pushNamed(
@@ -107,11 +107,36 @@ class SubjectScreen extends StatelessWidget {
       ),
     ),
     
-    _buildStatCard('0', 'Weak spots', const Color(0xFFE24B4A)),
+    // 2. INTERACTIVE WEAK SPOTS CARD WITH LIVE STREAM COUNT
+    StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('weakspots')
+          .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? 'anonymous_user')
+          .snapshots(),
+      builder: (context, weakSpotsSnapshot) {
+        final int weakSpotsCount = weakSpotsSnapshot.hasData ? weakSpotsSnapshot.data!.docs.length : 0;
+
+        return GestureDetector(
+         onTap: () {
+  Navigator.pushNamed(
+    context,
+    '/weakspots',
+    arguments: {
+      'subjectId': subjectId, // <-- Just change this from widget.subjectId to subjectId
+    },
+  );
+},
+          child: _buildStatCard(
+            '$weakSpotsCount', 
+            'Weak spots', 
+            const Color(0xFFE24B4A),
+          ),
+        );
+      },
+    ),
   ],
 ),
                 const SizedBox(height: 16),
-
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:convert';
 import 'dart:math';
@@ -16,6 +17,9 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
   int _currentIndex = 0;
   bool _showFront = true;
   bool _isLoading = true;
+  
+  // Performance Tracking States
+  int _correctCount = 0;
 
   late AnimationController _animationController;
   late Animation<double> _flipAnimation;
@@ -52,7 +56,6 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
     final String lectureId = args['lectureId'] ?? '';
 
     try {
-      // 1. Try loading from Hive Local Cache first
       var box = await Hive.openBox('flashcards');
       String? cachedJson = box.get(lectureId);
 
@@ -65,7 +68,6 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
         return;
       }
 
-      // 2. Fallback to Firestore if local cache isn't built yet
       final snapshot = await FirebaseFirestore.instance
           .collection('flashcards')
           .where('lectureId', isEqualTo: lectureId)
@@ -75,9 +77,9 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
         final cloudCards = snapshot.docs.map((doc) => {
           'question': doc['question'].toString(),
           'answer': doc['answer'].toString(),
+          'topic': doc.data().containsKey('topic') ? doc['topic'].toString() : 'General Concept',
         }).toList();
 
-        // Sync back to Hive cache for future offline use
         await box.put(lectureId, jsonEncode(cloudCards));
 
         setState(() {
@@ -102,9 +104,35 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
     setState(() => _showFront = !_showFront);
   }
 
+  // Handle grading choices and route forward
+  void _gradeCard(bool knewAnswer, String lectureId) async {
+    if (knewAnswer) {
+      _correctCount++;
+    } else {
+      // Isolate the fallback topic text or parse out question text summary
+      final String cardTopic = _cards[_currentIndex]['topic'] ?? _cards[_currentIndex]['question']!.split('?').first;
+      final String? userId = FirebaseAuth.instance.currentUser?.uid;
+
+      // Async push up structural weak spot log entry to Firestore
+      FirebaseFirestore.instance.collection('weakspots').add({
+        'topic': cardTopic,
+        'lectureId': lectureId,
+        'userId': userId ?? 'anonymous_user',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Move to next card or complete deck run
+    if (_currentIndex < _cards.length - 1) {
+      _nextCard();
+    } else {
+      _showCompletionDialog();
+    }
+  }
+
   void _nextCard() {
     if (_currentIndex < _cards.length - 1) {
-      if (!_showFront) _toggleFlip(); // Reset card state to front
+      if (!_showFront) _toggleFlip(); 
       Future.delayed(const Duration(milliseconds: 150), () {
         setState(() => _currentIndex++);
       });
@@ -113,11 +141,36 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
 
   void _previousCard() {
     if (_currentIndex > 0) {
-      if (!_showFront) _toggleFlip(); // Reset card state to front
+      if (!_showFront) _toggleFlip(); 
       Future.delayed(const Duration(milliseconds: 150), () {
         setState(() => _currentIndex--);
       });
     }
+  }
+
+  void _showCompletionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Deck Complete! 🎉', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Great session! You mastered $_correctCount out of ${_cards.length} cards properly.',
+          style: const TextStyle(color: textPurple, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Go back to subject screen
+            },
+            child: const Text('Back to Dashboard', style: TextStyle(color: accentNeon, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -130,6 +183,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
     final String lectureTitle = args['lectureTitle'] ?? 'Flashcards';
+    final String lectureId = args['lectureId'] ?? '';
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -159,7 +213,6 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
                   child: Column(
                     children: [
-                      // Linear progress tracker indicator
                       LinearProgressIndicator(
                         value: (_currentIndex + 1) / _cards.length,
                         backgroundColor: const Color(0xFF1E1E2E),
@@ -169,14 +222,14 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                       ),
                       const SizedBox(height: 12),
                       Row(
-  mainAxisAlignment: MainAxisAlignment.end, // Aligns items to the right side
-  children: [
-    Text(
-      'Card ${_currentIndex + 1} of ${_cards.length}',
-      style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
-    ),
-  ],
-),
+                        mainAxisAlignment: MainAxisAlignment.end, 
+                        children: [
+                          Text(
+                            'Card ${_currentIndex + 1} of ${_cards.length}',
+                            style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
                       const Spacer(),
 
                       // Flipping Card Layout View
@@ -186,22 +239,21 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                           animation: _flipAnimation,
                           builder: (context, child) {
                             final angle = _flipAnimation.value;
-                            // Ensure content matrix isn't mirroring elements backward
                             final isBackView = angle >= (pi / 2);
 
                             return Transform(
                               transform: Matrix4.identity()
-                                ..setEntry(3, 2, 0.001) // 3D depth perspective distortion factor
+                                ..setEntry(3, 2, 0.001) 
                                 ..rotateY(angle),
                               alignment: Alignment.center,
-                              child:Transform(
-  transform: isBackView 
-      ? (Matrix4.identity()..rotateY(pi)) 
-      : Matrix4.identity(),
-  alignment: Alignment.center,
-  child: Container(
+                              child: Transform(
+                                transform: isBackView 
+                                    ? (Matrix4.identity()..rotateY(pi)) 
+                                    : Matrix4.identity(),
+                                alignment: Alignment.center,
+                                child: Container(
                                   width: double.infinity,
-                                  height: MediaQuery.of(context).size.height * 0.45,
+                                  height: MediaQuery.of(context).size.height * 0.42,
                                   padding: const EdgeInsets.all(32),
                                   decoration: BoxDecoration(
                                     color: cardColor,
@@ -245,7 +297,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                                           textAlign: TextAlign.center,
                                           style: const TextStyle(
                                             color: Colors.white,
-                                            fontSize: 16,
+                                            fontSize: 15,
                                             fontWeight: FontWeight.w500,
                                             height: 1.4,
                                           ),
@@ -261,6 +313,48 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                       ),
 
                       const Spacer(),
+
+                      // Action Buttons Layout Row (Revealed post flip trigger animation)
+                      if (!_showFront) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2A1515),
+                                  foregroundColor: Colors.redAccent,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    side: const BorderSide(color: Colors.redAccent, width: 0.5),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.close_rounded, size: 16),
+                                label: const Text("Didn't Know", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                onPressed: () => _gradeCard(false, lectureId),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF112210),
+                                  foregroundColor: accentNeon,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    side: const BorderSide(color: accentNeon, width: 0.5),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.check_rounded, size: 16),
+                                label: const Text("Got It", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                onPressed: () => _gradeCard(true, lectureId),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                      ],
 
                       // Navigation Action Row controls
                       Row(

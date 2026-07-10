@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'screens/flashcard_screen.dart';
+import 'screens/weak_spots_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +49,7 @@ class MyApp extends StatelessWidget {
         '/subject-detail': (context) => const SubjectScreen(),
         '/chat': (context) => const ChatScreen(), // <-- 2. ADD THIS PATH MAP LINE
         '/flashcards': (context) => const FlashcardScreen(),
+        '/weakspots': (context) => const WeakSpotsScreen(),
       },
     );
   }
