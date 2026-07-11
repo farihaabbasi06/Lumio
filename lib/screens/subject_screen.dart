@@ -230,48 +230,104 @@ class SubjectScreen extends StatelessWidget {
                   )
                 else
                   ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: lectureDocs.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final doc = lectureDocs[index];
-                      final data = doc.data() as Map<String, dynamic>;
-                      final String title = data['title'] ?? 'L${index + 1}';
-                      final String summary = data['summary'] ?? 'No summary available';
+  shrinkWrap: true,
+  physics: const NeverScrollableScrollPhysics(),
+  itemCount: lectureDocs.length,
+  separatorBuilder: (context, index) => const SizedBox(height: 8),
+  itemBuilder: (context, index) {
+    final doc = lectureDocs[index];
+    final data = doc.data() as Map<String, dynamic>;
+    final String title = data['title'] ?? 'L${index + 1}';
+    final String summary = data['summary'] ?? 'No summary available';
 
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: cardColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          leading: CircleAvatar(
-                            backgroundColor: const Color(0xFF252542),
-                            foregroundColor: primaryPurple,
-                            child: Text('L${index + 1}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ),
-                          title: Text(title,
-                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-                          subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                          trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
-                          onTap: () {
-                            Navigator.pushNamed(
-                              context,
-                              '/chat',
-                              arguments: {
-                                'lectureId': doc.id,
-                                'lectureTitle': title,
-                                'slideText': data['slideText'] ?? '',
-                              },
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
+    return GestureDetector(
+      onLongPress: () {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1A1A2E),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Delete Lecture',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            content: Text(
+              'Delete "$title"? This cannot be undone.',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await FirebaseFirestore.instance
+                      .collection('lectures')
+                      .doc(doc.id)
+                      .delete();
+                  await FirebaseFirestore.instance
+                      .collection('flashcards')
+                      .where('lectureId', isEqualTo: doc.id)
+                      .get()
+                      .then((snap) {
+                    for (var d in snap.docs) d.reference.delete();
+                  });
+                  await FirebaseFirestore.instance
+                      .collection('weakspots')
+                      .where('lectureId', isEqualTo: doc.id)
+                      .get()
+                      .then((snap) {
+                    for (var d in snap.docs) d.reference.delete();
+                  });
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Lecture deleted successfully'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  }
+                },
+                child: const Text('Delete',
+                    style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          leading: CircleAvatar(
+            backgroundColor: const Color(0xFF252542),
+            foregroundColor: primaryPurple,
+            child: Text('L${index + 1}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ),
+          title: Text(title,
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+          subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+          trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+          onTap: () {
+            Navigator.pushNamed(
+              context,
+              '/chat',
+              arguments: {
+                'lectureId': doc.id,
+                'lectureTitle': title,
+                'slideText': data['slideText'] ?? '',
+              },
+            );
+          },
+        ),
+      ),
+    );
+  },
+),
               ],
             ),
           );
@@ -281,41 +337,11 @@ class SubjectScreen extends StatelessWidget {
   }
 
   Future<String> _extractTextViaHTTP(Uint8List fileBytes) async {
-    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-    final url = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey',
-    );
-
-    final base64Pdf = base64Encode(fileBytes);
-
-    final body = jsonEncode({
-      "contents": [
-        {
-          "parts": [
-            {"text": "Extract and transcribe all text content visible in this document. Do not summarize, just output the raw text found."},
-            {
-              "inline_data": {
-                "mime_type": "application/pdf",
-                "data": base64Pdf
-              }
-            }
-          ]
-        }
-      ]
-    });
-
-    final response = await http.post(
-      url,
-      headers: {"Content-Type": "application/json"},
-      body: body,
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '';
-    }
-    return '';
-  }
+  // Groq does not support PDF vision
+  // syncfusion already handles text extraction above
+  // this fallback is not needed
+  return '';
+}
 
   // INTEGRATED BACKGROUND TASK: Processes AI flashcards, writes to Hive box, commits to Firestore
   Future<void> _generateAndSaveFlashcardsBackground(String lectureId, String slideText) async {
@@ -420,10 +446,11 @@ class SubjectScreen extends StatelessWidget {
 
       // TRIGGER FLASHCARD GENERATION CHAIN RIGHT HERE IN THE BACKGROUND
       // This will run asynchronously without making the user wait at the loading dialog!
-      _generateAndSaveFlashcardsBackground(lectureDocRef.id, bigCombinedText);
+      // Wait for flashcards to finish before closing dialog
+await _generateAndSaveFlashcardsBackground(lectureDocRef.id, bigCombinedText);
 
-      if (!context.mounted) return;
-      Navigator.pop(context);
+if (!context.mounted) return;
+Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lecture uploaded successfully! Flashcards generating...')),

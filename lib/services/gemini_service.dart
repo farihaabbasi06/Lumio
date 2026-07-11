@@ -4,60 +4,54 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class GeminiService {
-  static const int dailyLimit = 20;
+  static const int dailyLimit = 50;
 
-  // Direct HTTP call — safely extracts your key from the .env file variable pool
-  Future<String> _callGeminiAPI(String prompt) async {
-    // This looks up your .env file key directly
+  // Groq API call — replaces Gemini completely
+  Future<String> _callGroqAPI(String prompt) async {
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
 
-    final url = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey',
-    );
+    final url = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
 
     final body = jsonEncode({
-      "contents": [
-        {
-          "parts": [
-            {"text": prompt}
-          ]
-        }
-      ]
+      "model": "llama-3.3-70b-versatile",
+      "messages": [
+        {"role": "user", "content": prompt}
+      ],
+      "temperature": 0.7,
+      "max_tokens": 1024,
     });
 
     final response = await http.post(
       url,
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $apiKey",
+      },
       body: body,
     );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'];
-      return text ?? "The AI could not generate an answer.";
+      return data['choices']?[0]?['message']?['content'] ?? "No answer generated.";
+    } else if (response.statusCode == 429) {
+      return "QUOTA_ERROR: Rate limit reached. Please wait a moment and try again.";
     } else {
-      print("Status Code: ${response.statusCode}");
-      print("Response Body: ${response.body}");
-
       final error = jsonDecode(response.body);
-      return "API Error: ${error['error']['message']}";
+      return "API Error: ${error['error']?['message'] ?? response.statusCode}";
     }
   }
 
-  // Generate structured Flashcards JSON array from text extraction
   Future<String> generateFlashcards(String slideText) async {
-    if (slideText.trim().isEmpty) {
-      return '[]';
-    }
+    if (slideText.trim().isEmpty) return '[]';
 
     final prompt = """
-From these lecture slides generate exactly 10 flashcards. 
-Return ONLY a valid JSON array like the example below. Do not include markdown code block formatting (like ```json or ```), no conversational intros, and no extra text.
+From these lecture slides generate exactly 10 flashcards.
+Return ONLY a valid JSON array. No markdown, no extra text.
 
-Example Format:
+Example:
 [
-  {"question": "What is the primary topic of Slide 1?", "answer": "The core concept definition."},
-  {"question": "Explain the secondary point outlined in the text.", "answer": "The step-by-step process details."}
+  {"question": "What is X?", "answer": "X is..."},
+  {"question": "Explain Y.", "answer": "Y means..."}
 ]
 
 Lecture Content:
@@ -65,24 +59,47 @@ $slideText
 """;
 
     try {
-      final rawResponse = await _callGeminiAPI(prompt);
-      
-      String cleanResponse = rawResponse.trim();
-      
-      // Clean up code blocks if Gemini ignores the prompt instruction and wraps it anyway
-      if (cleanResponse.contains('```')) {
-        cleanResponse = cleanResponse
-            .replaceAll(RegExp(r'```json|```'), '')
-            .trim();
+      final raw = await _callGroqAPI(prompt);
+      String clean = raw.trim();
+      if (clean.contains('```')) {
+        clean = clean.replaceAll(RegExp(r'```json|```'), '').trim();
       }
-      
-      return cleanResponse;
+      return clean;
     } catch (e) {
-      print("Error generating flashcards: $e");
       return '[]';
     }
   }
 
+  Future<String> predictExamTopics(String slideText) async {
+    if (slideText.trim().isEmpty) return '[]';
+
+    final prompt = """
+Analyse these lecture slides. Rank topics by exam importance. 
+Return ONLY a valid JSON array. No markdown, no extra text.
+Ensure it is sorted by percentage from highest to lowest.
+
+Example:
+[
+  {"topic": "Time Complexity", "percentage": 95, "reason": "Mentioned on multiple slides with core algorithms."},
+  {"topic": "Memory Allocation", "percentage": 65, "reason": "Covered briefly in a summary slide."}
+]
+
+Lecture Content:
+$slideText
+""";
+
+    try {
+      final raw = await _callGroqAPI(prompt);
+      String clean = raw.trim();
+      if (clean.contains('```')) {
+        clean = clean.replaceAll(RegExp(r'```json|```'), '').trim();
+      }
+      return clean;
+    } catch (e) {
+      return '[]';
+    }
+  }
+  
   Future<int> getTodayCount() async {
     final prefs = await SharedPreferences.getInstance();
     final today = DateTime.now().toIso8601String().substring(0, 10);
@@ -130,7 +147,7 @@ $question
 Give a clear and direct answer. At the end add the source like this: [Source: Page X]
 """;
 
-      final result = await _callGeminiAPI(prompt);
+      final result = await _callGroqAPI(prompt);
 
       if (!result.startsWith("QUOTA_ERROR") && !result.startsWith("API Error")) {
         await incrementCount();
