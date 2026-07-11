@@ -105,7 +105,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
   }
 
   // Handle grading choices and route forward
-  void _gradeCard(bool knewAnswer, String lectureId) async {
+  void _gradeCard(bool knewAnswer, String lectureId, String subjectId) async {
     if (knewAnswer) {
       _correctCount++;
     } else {
@@ -119,6 +119,8 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
         'lectureId': lectureId,
         'userId': userId ?? 'anonymous_user',
         'timestamp': FieldValue.serverTimestamp(),
+        // 💥 FIXED: The missing field is now explicitly captured and sent!
+        'subjectId': subjectId, 
       });
     }
 
@@ -184,6 +186,8 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
     final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
     final String lectureTitle = args['lectureTitle'] ?? 'Flashcards';
     final String lectureId = args['lectureId'] ?? '';
+    // 💥 FIXED: Safely extracting subjectId from route arguments here
+    final String subjectId = args['subjectId'] ?? ''; 
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -331,7 +335,8 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                                 ),
                                 icon: const Icon(Icons.close_rounded, size: 16),
                                 label: const Text("Didn't Know", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                onPressed: () => _gradeCard(false, lectureId),
+                                // 💥 FIXED: Passed subjectId here
+                                onPressed: () => _gradeCard(false, lectureId, subjectId), 
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -348,7 +353,8 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                                 ),
                                 icon: const Icon(Icons.check_rounded, size: 16),
                                 label: const Text("Got It", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                onPressed: () => _gradeCard(true, lectureId),
+                                // 💥 FIXED: Passed subjectId here
+                                onPressed: () => _gradeCard(true, lectureId, subjectId),
                               ),
                             ),
                           ],

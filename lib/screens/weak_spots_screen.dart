@@ -31,9 +31,11 @@ class WeakSpotsScreen extends StatelessWidget {
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
+        // Fixed: Query now restricts records to both the current user AND the current subject
         stream: FirebaseFirestore.instance
             .collection('weakspots')
             .where('userId', isEqualTo: userId ?? 'anonymous_user')
+            .where('subjectId', isEqualTo: subjectId) // Filters out other subjects
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -48,7 +50,7 @@ class WeakSpotsScreen extends StatelessWidget {
                   Icon(Icons.gpp_good_rounded, size: 48, color: Colors.green.withAlpha(100)),
                   const SizedBox(height: 12),
                   const Text(
-                    'No weak spots logged yet!',
+                    'No weak spots logged yet for this subject!',
                     style: TextStyle(color: Colors.grey, fontSize: 14),
                   ),
                   const SizedBox(height: 4),

@@ -22,25 +22,37 @@ class GlobalFlashcardsView extends StatelessWidget {
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // Fetches all lectures that have generated flashcards data
         stream: FirebaseFirestore.instance.collection('lectures').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: primaryPurple));
           }
 
-          // Filter documents locally to ensure they have flashcard payloads
-          final deckDocs = snapshot.data?.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return data['flashcards'] != null && data['flashcards'].toString().isNotEmpty;
-              }).toList() ?? [];
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Error loading data: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+            );
+          }
+
+          final allDocs = snapshot.data?.docs ?? [];
+
+          // Filters out items that don't have flashcards data populated yet
+          final deckDocs = allDocs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return data.containsKey('flashcards') && 
+                   data['flashcards'] != null && 
+                   data['flashcards'].toString().trim().isNotEmpty;
+          }).toList();
 
           if (deckDocs.isEmpty) {
             return const Center(
-              child: Text(
-                'No flashcard decks available yet.\nUpload a lecture PDF inside a subject to build one!',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 14),
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Text(
+                  'No flashcard decks found.\n\nMake sure you have uploaded a lecture PDF and that the AI processing has completely finished!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey, fontSize: 14, height: 1.5),
+                ),
               ),
             );
           }
@@ -51,8 +63,9 @@ class GlobalFlashcardsView extends StatelessWidget {
             itemBuilder: (context, index) {
               final doc = deckDocs[index];
               final data = doc.data() as Map<String, dynamic>;
-              final String title = data['title'] ?? 'Untitled Deck';
-              final int slideCount = data['pageCount'] ?? 0;
+              
+              final String title = data['title'] ?? data['name'] ?? 'Untitled Deck';
+              final int slideCount = data['pageCount'] ?? data['slides'] ?? 0;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -81,11 +94,15 @@ class GlobalFlashcardsView extends StatelessWidget {
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
                   onTap: () {
-                    // Routes to your existing study engine screen using your parameters
+                    // Fixed: Sending arguments as a Map structure containing both keys
                     Navigator.pushNamed(
                       context,
-                      '/deck-view', 
-                      arguments: {'lectureId': doc.id, 'lectureTitle': title},
+                      '/flashcards', 
+                      arguments: {
+                        'lectureId': doc.id,
+                        'lectureTitle': title,
+                        'subjectId': data['subjectId'] ?? '', // Safely forwards the subject link from the lecture document!
+                      },
                     );
                   },
                 ),
