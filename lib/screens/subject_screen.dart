@@ -69,73 +69,73 @@ class SubjectScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-               GridView.count(
-  crossAxisCount: 2,
-  shrinkWrap: true,
-  physics: const NeverScrollableScrollPhysics(),
-  crossAxisSpacing: 10,
-  mainAxisSpacing: 10,
-  childAspectRatio: 1.6,
-  children: [
-    _buildStatCard('$lectureCount', 'Lectures', primaryPurple),
-    _buildStatCard(totalSlides > 0 ? '$totalSlides' : '0', 'Slides', accentNeon),
-    
-    // 1. INTERACTIVE FLASHCARD CARD
-    GestureDetector(
-      onTap: lectureDocs.isNotEmpty
-          ? () {
-              final latestDoc = lectureDocs.first;
-              final latestData = latestDoc.data() as Map<String, dynamic>;
-              Navigator.pushNamed(
-                context,
-                '/flashcards',
-                arguments: {
-                  'lectureId': latestDoc.id,
-                  'lectureTitle': latestData['title'] ?? 'Lecture',
-                },
-              );
-            }
-          : () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Upload a lecture first to generate flashcards!')),
-              );
-            },
-      child: _buildStatCard(
-        lectureDocs.isNotEmpty ? 'Review' : '0', 
-        'Flashcards', 
-        orangeWarn,
-      ),
-    ),
-    
-    // 2. INTERACTIVE WEAK SPOTS CARD WITH LIVE STREAM COUNT
-    StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('weakspots')
-          .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? 'anonymous_user')
-          .snapshots(),
-      builder: (context, weakSpotsSnapshot) {
-        final int weakSpotsCount = weakSpotsSnapshot.hasData ? weakSpotsSnapshot.data!.docs.length : 0;
+                GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 1.6,
+                  children: [
+                    _buildStatCard('$lectureCount', 'Lectures', primaryPurple),
+                    _buildStatCard(totalSlides > 0 ? '$totalSlides' : '0', 'Slides', accentNeon),
+                    
+                    // 1. INTERACTIVE FLASHCARD CARD
+                    GestureDetector(
+                      onTap: lectureDocs.isNotEmpty
+                          ? () {
+                              final latestDoc = lectureDocs.first;
+                              final latestData = latestDoc.data() as Map<String, dynamic>;
+                              Navigator.pushNamed(
+                                context,
+                                '/flashcards',
+                                arguments: {
+                                  'lectureId': latestDoc.id,
+                                  'lectureTitle': latestData['title'] ?? 'Lecture',
+                                },
+                              );
+                            }
+                          : () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Upload a lecture first to generate flashcards!')),
+                              );
+                            },
+                      child: _buildStatCard(
+                        lectureDocs.isNotEmpty ? 'Review' : '0', 
+                        'Flashcards', 
+                        orangeWarn,
+                      ),
+                    ),
+                    
+                    // 2. INTERACTIVE WEAK SPOTS CARD WITH LIVE STREAM COUNT
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('weakspots')
+                          .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? 'anonymous_user')
+                          .snapshots(),
+                      builder: (context, weakSpotsSnapshot) {
+                        final int weakSpotsCount = weakSpotsSnapshot.hasData ? weakSpotsSnapshot.data!.docs.length : 0;
 
-        return GestureDetector(
-         onTap: () {
-  Navigator.pushNamed(
-    context,
-    '/weakspots',
-    arguments: {
-      'subjectId': subjectId, // <-- Just change this from widget.subjectId to subjectId
-    },
-  );
-},
-          child: _buildStatCard(
-            '$weakSpotsCount', 
-            'Weak spots', 
-            const Color(0xFFE24B4A),
-          ),
-        );
-      },
-    ),
-  ],
-),
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.pushNamed(
+                              context,
+                              '/weakspots',
+                              arguments: {
+                                'subjectId': subjectId,
+                              },
+                            );
+                          },
+                          child: _buildStatCard(
+                            '$weakSpotsCount', 
+                            'Weak spots', 
+                            const Color(0xFFE24B4A),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(14),
@@ -230,104 +230,104 @@ class SubjectScreen extends StatelessWidget {
                   )
                 else
                   ListView.separated(
-  shrinkWrap: true,
-  physics: const NeverScrollableScrollPhysics(),
-  itemCount: lectureDocs.length,
-  separatorBuilder: (context, index) => const SizedBox(height: 8),
-  itemBuilder: (context, index) {
-    final doc = lectureDocs[index];
-    final data = doc.data() as Map<String, dynamic>;
-    final String title = data['title'] ?? 'L${index + 1}';
-    final String summary = data['summary'] ?? 'No summary available';
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: lectureDocs.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final doc = lectureDocs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final String title = data['title'] ?? 'L${index + 1}';
+                      final String summary = data['summary'] ?? 'No summary available';
 
-    return GestureDetector(
-      onLongPress: () {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A2E),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('Delete Lecture',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            content: Text(
-              'Delete "$title"? This cannot be undone.',
-              style: const TextStyle(color: Colors.grey),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  await FirebaseFirestore.instance
-                      .collection('lectures')
-                      .doc(doc.id)
-                      .delete();
-                  await FirebaseFirestore.instance
-                      .collection('flashcards')
-                      .where('lectureId', isEqualTo: doc.id)
-                      .get()
-                      .then((snap) {
-                    for (var d in snap.docs) d.reference.delete();
-                  });
-                  await FirebaseFirestore.instance
-                      .collection('weakspots')
-                      .where('lectureId', isEqualTo: doc.id)
-                      .get()
-                      .then((snap) {
-                    for (var d in snap.docs) d.reference.delete();
-                  });
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Lecture deleted successfully'),
-                        backgroundColor: Colors.redAccent,
-                      ),
-                    );
-                  }
-                },
-                child: const Text('Delete',
-                    style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        );
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          leading: CircleAvatar(
-            backgroundColor: const Color(0xFF252542),
-            foregroundColor: primaryPurple,
-            child: Text('L${index + 1}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
-          title: Text(title,
-              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-          subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-          trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
-          onTap: () {
-            Navigator.pushNamed(
-              context,
-              '/chat',
-              arguments: {
-                'lectureId': doc.id,
-                'lectureTitle': title,
-                'slideText': data['slideText'] ?? '',
-              },
-            );
-          },
-        ),
-      ),
-    );
-  },
-),
+                      return GestureDetector(
+                        onLongPress: () {
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: const Color(0xFF1A1A2E),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              title: const Text('Delete Lecture',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              content: Text(
+                                'Delete "$title"? This cannot be undone.',
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    Navigator.pop(ctx);
+                                    await FirebaseFirestore.instance
+                                        .collection('lectures')
+                                        .doc(doc.id)
+                                        .delete();
+                                    await FirebaseFirestore.instance
+                                        .collection('flashcards')
+                                        .where('lectureId', isEqualTo: doc.id)
+                                        .get()
+                                        .then((snap) {
+                                      for (var d in snap.docs) d.reference.delete();
+                                    });
+                                    await FirebaseFirestore.instance
+                                        .collection('weakspots')
+                                        .where('lectureId', isEqualTo: doc.id)
+                                        .get()
+                                        .then((snap) {
+                                      for (var d in snap.docs) d.reference.delete();
+                                    });
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Lecture deleted successfully'),
+                                          backgroundColor: Colors.redAccent,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: const Text('Delete',
+                                      style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            leading: CircleAvatar(
+                              backgroundColor: const Color(0xFF252542),
+                              foregroundColor: primaryPurple,
+                              child: Text('L${index + 1}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                            title: Text(title,
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                            subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                            onTap: () {
+                              Navigator.pushNamed(
+                                context,
+                                '/chat',
+                                arguments: {
+                                  'lectureId': doc.id,
+                                  'lectureTitle': title,
+                                  'slideText': data['slideText'] ?? '',
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
               ],
             ),
           );
@@ -337,30 +337,46 @@ class SubjectScreen extends StatelessWidget {
   }
 
   Future<String> _extractTextViaHTTP(Uint8List fileBytes) async {
-  // Groq does not support PDF vision
-  // syncfusion already handles text extraction above
-  // this fallback is not needed
-  return '';
-}
+    return '';
+  }
 
-  // INTEGRATED BACKGROUND TASK: Processes AI flashcards, writes to Hive box, commits to Firestore
+  // INTEGRATED BACKGROUND TASK: Processes AI flashcards & exam predictions simultaneously
+// INTEGRATED BACKGROUND TASK: Processes AI flashcards & exam predictions simultaneously
   Future<void> _generateAndSaveFlashcardsBackground(String lectureId, String slideText) async {
     if (slideText.trim().isEmpty) return;
     
+    // Fixes the '_geminiService' undefined error by instantiating it locally
     final GeminiService geminiService = GeminiService();
 
     try {
-      print("Starting background automated flashcard generation pipeline...");
+      print("Starting background automated flashcard and prediction pipelines...");
       
-      // 1. Fetch JSON string map via Gemini service instructions
-      String jsonString = await geminiService.generateFlashcards(slideText);
+      // 1. Fetch Flashcards data from backend service
+      String flashcardsJson = await geminiService.generateFlashcards(slideText);
+      
+      // 2. Fetch Exam Prediction data from backend service
+      String examPredictionsJson = await geminiService.predictExamTopics(slideText);
+      
+      // Parse predictions safely into an array list to store directly in Firestore
+      List<dynamic> examTopicsList = [];
+      try {
+        examTopicsList = jsonDecode(examPredictionsJson);
+      } catch (e) {
+        print("Error parsing exam topics JSON: $e");
+      }
 
-      // 2. Save directly into a local box using lectureId as key
+      // 3. Fixes 'selectedFileName' / 'currentSubjectId' by using document update on the real lectureId
+      await FirebaseFirestore.instance.collection('lectures').doc(lectureId).update({
+        'flashcards': flashcardsJson,
+        'examTopics': examTopicsList,
+      });
+
+      // 4. Save flashcards payload string into local Hive box cache for offline access
       var box = await Hive.openBox('flashcards');
-      await box.put(lectureId, jsonString);
+      await box.put(lectureId, flashcardsJson);
 
-      // 3. Parse JSON array list payload items
-      final List<dynamic> flashcardList = jsonDecode(jsonString);
+      // 5. Parse JSON array list payload items to commit singular records for metrics syncing
+      final List<dynamic> flashcardList = jsonDecode(flashcardsJson);
       final firestore = FirebaseFirestore.instance;
       WriteBatch batch = firestore.batch();
 
@@ -374,11 +390,10 @@ class SubjectScreen extends StatelessWidget {
         });
       }
 
-      // Execute batch network database storage write 
       await batch.commit();
-      print("Flashcard cloud syncing pipeline completed successfully!");
+      print("AI Content sync pipelines completed successfully!");
     } catch (e) {
-      print("Background flashcard generator execution failure error: $e");
+      print("Background content generator execution failure error: $e");
     }
   }
 
@@ -444,16 +459,14 @@ class SubjectScreen extends StatelessWidget {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // TRIGGER FLASHCARD GENERATION CHAIN RIGHT HERE IN THE BACKGROUND
-      // This will run asynchronously without making the user wait at the loading dialog!
-      // Wait for flashcards to finish before closing dialog
-await _generateAndSaveFlashcardsBackground(lectureDocRef.id, bigCombinedText);
+      // Wait for flashcards & exam prediction processing execution workflows to complete 
+      await _generateAndSaveFlashcardsBackground(lectureDocRef.id, bigCombinedText);
 
-if (!context.mounted) return;
-Navigator.pop(context);
+      if (!context.mounted) return;
+      Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lecture uploaded successfully! Flashcards generating...')),
+        const SnackBar(content: Text('Lecture uploaded successfully! AI features generated.')),
       );
     } catch (e) {
       if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import 'exam_predictor_screen.dart';
+import 'global_flashcards_view.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,11 +23,11 @@ class _HomeScreenState extends State<HomeScreen> {
   static const accentNeon = Color(0xFF5DCAA5); // Mint accent color for progress from prototype
   static const textPurple = Color(0xFFCECBF6);
 
-  // Temporary placeholder screens for other bottom tabs
+  // Clean, singular definition for your application views
   final List<Widget> _pages = [
     const SubjectsDashboardView(),
-    const Center(child: Text('Flashcards Screen', style: TextStyle(color: Colors.white, fontSize: 18))),
-    const Center(child: Text('Exam AI Screen', style: TextStyle(color: Colors.white, fontSize: 18))),
+    const GlobalFlashcardsView(), // Global flashcard dashboard view
+    const ExamPredictorScreen(),  // Live AI dashboard layout hookup
     const Center(child: Text('Profile Screen', style: TextStyle(color: Colors.white, fontSize: 18))),
   ];
 
@@ -46,7 +48,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(Icons.logout_outlined, color: textPurple),
                   onPressed: () async {
                     await AuthService().signOut();
-                    Navigator.pushReplacementNamed(context, '/login');
+                    if (context.mounted) {
+                      Navigator.pushReplacementNamed(context, '/login');
+                    }
                   },
                 ),
               ],
@@ -54,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : null,
       body: _pages[_currentIndex],
       
-      // STEP 4: Add Bottom Navigation Bar
+      // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -77,7 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       
-      // STEP 2: Add New Subject Button
+      // Add New Subject Button
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
               backgroundColor: primaryPurple,
@@ -127,9 +131,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   await FirebaseFirestore.instance.collection('subjects').add({
                     'name': subjectName,
                     'userId': _currentUserId,
-                    'progress': 0.35, // Setting a dummy default progress display percentage (e.g. 35%)
+                    'progress': 0.35, 
                   });
-                  Navigator.pop(context);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
                 }
               },
               child: const Text('Create', style: TextStyle(color: textPurple)),
@@ -150,7 +156,6 @@ class SubjectsDashboardView extends StatelessWidget {
     final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return StreamBuilder<QuerySnapshot>(
-      // Filter subjects belonging only to the currently logged in student
       stream: FirebaseFirestore.instance
           .collection('subjects')
           .where('userId', isEqualTo: currentUserId)
@@ -185,7 +190,6 @@ class SubjectsDashboardView extends StatelessWidget {
 
             return GestureDetector(
               onTap: () {
-                // Navigate into specific subject page view passing along parameters
                 Navigator.pushNamed(
                   context,
                   '/subject-detail',
@@ -202,7 +206,6 @@ class SubjectsDashboardView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Icon and Title Header Layout
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -223,7 +226,6 @@ class SubjectsDashboardView extends StatelessWidget {
                         ),
                       ],
                     ),
-                    // Progress bar indicator design
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
