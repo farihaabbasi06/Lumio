@@ -1,154 +1,112 @@
 import 'package:flutter/material.dart';
-import '../services/gemini_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
- 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 class LectureDetailScreen extends StatefulWidget {
   const LectureDetailScreen({super.key});
- 
+
   @override
   State<LectureDetailScreen> createState() => _LectureDetailScreenState();
 }
- 
+
 class _LectureDetailScreenState extends State<LectureDetailScreen> {
-  final List<Map<String, String?>> _messages = [];
-  final TextEditingController _chatController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  final GeminiService _geminiService = GeminiService();
-  bool _isLoading = false;
-  int _questionsLeft = 20; // shown in UI
- 
+  List<Map<String, dynamic>> _weakSpots = [];
+  bool _loadingWeakSpots = true;
+
   static const backgroundColor = Color(0xFF0D0D18);
   static const cardColor = Color(0xFF1A1A2E);
   static const primaryPurple = Color(0xFF534AB7);
   static const accentNeon = Color(0xFF5DCAA5);
   static const textPurple = Color(0xFFCECBF6);
- 
+
   @override
-  void initState() {
-    super.initState();
-   // _resetCounterForTesting();
-    // FIX 2: load how many questions are left today when screen opens
-    _loadQuestionsLeft();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final String lectureId = args['lectureId'] ?? '';
+    final String subjectId = args['subjectId'] ?? '';
+    _loadWeakSpots(lectureId);
+    _updateSubjectProgress(subjectId, lectureId);
   }
 
-  Future<void> _resetCounterForTesting() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt('question_count', 0);
-  await prefs.setString('question_date', '');
-}
- 
-  Future<void> _loadQuestionsLeft() async {
-    final remaining = await _geminiService.questionsRemaining();
-    if (mounted) {
-      setState(() => _questionsLeft = remaining);
-    }
-  }
- 
-  void _sendMessage(String extractedText) async {
-    final text = _chatController.text.trim();
-    if (text.isEmpty || _isLoading) return;
- 
-    // FIX 2: block send if limit reached before even calling API
-    if (_questionsLeft <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Daily question limit reached. Come back tomorrow!'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
- 
-    setState(() {
-      _messages.add({'sender': 'user', 'text': text});
-      _chatController.clear();
-      _isLoading = true;
-    });
- 
-    _scrollToBottom();
- 
-    final aiAnswerString = await _geminiService.askQuestion(extractedText, text);
- 
-    // FIX 1: handle quota error message from service cleanly
-    if (aiAnswerString.startsWith('QUOTA_ERROR') ||
-        aiAnswerString.startsWith('LIMIT_REACHED')) {
-      if (!mounted) return;
-      setState(() {
-        _messages.add({
-          'sender': 'ai',
-          'text': aiAnswerString.contains('LIMIT_REACHED')
-              ? 'You have used all your questions for today. Come back tomorrow!'
-              : 'API daily limit reached. Please try again tomorrow.',
-          'slide': null,
-        });
-        _isLoading = false;
-        _questionsLeft = 0;
-      });
-      _scrollToBottom();
-      return;
-    }
- 
-    // Parse slide number from response
-    String detectedPage = "1";
-    final match = RegExp(
-      r'\[Source:\s*(?:Page|Slide)\s*(\d+)\]',
-      caseSensitive: false,
-    ).firstMatch(aiAnswerString);
-    if (match != null) {
-      detectedPage = match.group(1)!;
-    }
- 
-    final displayText = aiAnswerString
-        .replaceAll(
-          RegExp(r'\[Source:\s*(?:Page|Slide)\s*\d+\]', caseSensitive: false),
-          '',
-        )
-        .trim();
- 
-    if (!mounted) return;
- 
-    // FIX 2: refresh questions left count after successful answer
-    final remaining = await _geminiService.questionsRemaining();
- 
-    setState(() {
-      _messages.add({
-        'sender': 'ai',
-        'text': displayText,
-        'slide': detectedPage,
-      });
-      _isLoading = false;
-      _questionsLeft = remaining;
-    });
- 
-    _scrollToBottom();
-  }
- 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
+  // Load weak spots for this lecture grouped by topic
+  Future<void> _loadWeakSpots(String lectureId) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('weakspots')
+          .where('userId', isEqualTo: uid)
+          .where('lectureId', isEqualTo: lectureId)
+          .get();
+
+      // Group by topic and count occurrences
+      final Map<String, int> topicCount = {};
+      for (var doc in snap.docs) {
+        final topic = doc['topic']?.toString() ?? 'Unknown';
+        topicCount[topic] = (topicCount[topic] ?? 0) + 1;
       }
-    });
+
+      // Sort by highest count and take top 3
+      final sorted = topicCount.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+      final top3 = sorted.take(3).map((e) => {
+        'topic': e.key,
+        'count': e.value,
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _weakSpots = top3;
+          _loadingWeakSpots = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingWeakSpots = false);
+    }
   }
- 
-  @override
-  void dispose() {
-    _chatController.dispose();
-    _scrollController.dispose();
-    super.dispose();
+
+  // Update subject progress when lecture is opened
+  Future<void> _updateSubjectProgress(String subjectId, String lectureId) async {
+    if (subjectId.isEmpty) return;
+    try {
+      // Mark this lecture as opened
+      await FirebaseFirestore.instance
+          .collection('lectures')
+          .doc(lectureId)
+          .update({'opened': true});
+
+      // Count total lectures and opened lectures in subject
+      final allLectures = await FirebaseFirestore.instance
+          .collection('lectures')
+          .where('subjectId', isEqualTo: subjectId)
+          .get();
+
+      final openedLectures = allLectures.docs
+          .where((doc) => doc.data()['opened'] == true)
+          .length;
+
+      final total = allLectures.docs.length;
+      final progress = total > 0 ? (openedLectures / total * 100).round() : 0;
+
+      // Update progress on subject document
+      await FirebaseFirestore.instance
+          .collection('subjects')
+          .doc(subjectId)
+          .update({'progress': progress});
+    } catch (e) {
+      // Silent fail — progress update is not critical
+    }
   }
- 
+
   @override
   Widget build(BuildContext context) {
-    final args =
-        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-    final String lectureTitle = args['lectureTitle'] ?? 'Lecture Detail';
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final String lectureTitle = args['lectureTitle'] ?? 'Lecture';
+    final String lectureId = args['lectureId'] ?? '';
+    final String subjectId = args['subjectId'] ?? '';
     final String slideText = args['slideText'] ?? '';
- 
+
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
@@ -160,269 +118,262 @@ class _LectureDetailScreenState extends State<LectureDetailScreen> {
         ),
         title: Text(
           lectureTitle,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
         ),
-        // FIX 2: show questions remaining counter in top right
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _questionsLeft > 5
-                      ? const Color(0xFF112210)
-                      : const Color(0xFF2A1510),
-                  borderRadius: BorderRadius.circular(99),
-                  border: Border.all(
-                    color: _questionsLeft > 5
-                        ? const Color(0xFF1D9E75)
-                        : Colors.redAccent,
-                    width: 0.5,
-                  ),
-                ),
-                child: Text(
-                  '$_questionsLeft left today',
-                  style: TextStyle(
-                    color: _questionsLeft > 5
-                        ? accentNeon
-                        : Colors.redAccent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _messages.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+
+            // SECTION 1 — 4 feature buttons
+            const Text(
+              'STUDY TOOLS',
+              style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+            ),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.3,
+              children: [
+
+                // Button 1 — Chat
+                _buildToolButton(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  label: 'AI Chat',
+                  subtitle: 'Ask anything',
+                  color: primaryPurple,
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    '/chat',
+                    arguments: {
+                      'lectureId': lectureId,
+                      'lectureTitle': lectureTitle,
+                      'subjectId': subjectId,
+                      'slideText': slideText,
+                    },
+                  ),
+                ),
+
+                // Button 2 — Flashcards
+                _buildToolButton(
+                  icon: Icons.style_rounded,
+                  label: 'Flashcards',
+                  subtitle: 'Test yourself',
+                  color: const Color(0xFFEF9F27),
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    '/flashcards',
+                    arguments: {
+                      'lectureId': lectureId,
+                      'lectureTitle': lectureTitle,
+                      'subjectId': subjectId,
+                    },
+                  ),
+                ),
+
+                // Button 3 — Exam AI
+                _buildToolButton(
+                  icon: Icons.track_changes_rounded,
+                  label: 'Exam AI',
+                  subtitle: 'Predict topics',
+                  color: accentNeon,
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    '/exam-predictor',
+                    arguments: {
+                      'lectureId': lectureId,
+                      'lectureTitle': lectureTitle,
+                    },
+                  ),
+                ),
+
+                // Button 4 — Mind Map
+                _buildToolButton(
+                  icon: Icons.hub_rounded,
+                  label: 'Mind Map',
+                  subtitle: 'Visual overview',
+                  color: const Color(0xFF3A86FF),
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    '/mindmap',
+                    arguments: {
+                      'lectureId': lectureId,
+                      'subjectId': subjectId,
+                      'lectureTitle': lectureTitle,
+                      'slideText': slideText,
+                    },
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 28),
+
+            // SECTION 2 — Weak spot report
+            const Text(
+              'FOCUS ON THESE',
+              style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+            ),
+            const SizedBox(height: 12),
+
+            if (_loadingWeakSpots)
+              const Center(child: CircularProgressIndicator(color: primaryPurple, strokeWidth: 2))
+            else if (_weakSpots.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.check_circle_outline_rounded, color: accentNeon, size: 20),
+                    SizedBox(width: 10),
+                    Text(
+                      'No weak spots yet — keep studying!',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Column(
+                children: _weakSpots.map((spot) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A1015),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.3), width: 0.5),
+                    ),
+                    child: Row(
                       children: [
-                        Icon(
-                          Icons.auto_awesome_rounded,
-                          size: 48,
-                          color: primaryPurple.withAlpha(150),
+                        const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                spot['topic'],
+                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                              ),
+                              Text(
+                                'Got wrong ${spot['count']} times',
+                                style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Ask Lumio AI anything about this document',
-                          style: TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '$_questionsLeft questions available today',
-                          style: const TextStyle(
-                            color: accentNeon,
-                            fontSize: 11,
+                        // Quick chat button for this weak spot
+                        GestureDetector(
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            '/chat',
+                            arguments: {
+                              'lectureId': lectureId,
+                              'lectureTitle': lectureTitle,
+                              'subjectId': subjectId,
+                              'slideText': slideText,
+                              'initialMessage': 'Explain ${spot['topic']} in detail',
+                            },
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF3A1520),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                            ),
+                            child: const Text('Study', style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],
                     ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 20,
-                    ),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = _messages[index];
-                      final isUser = msg['sender'] == 'user';
- 
-                      if (isUser) {
-                        return Align(
-                          alignment: Alignment.centerRight,
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 16, left: 40),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            decoration: const BoxDecoration(
-                              color: primaryPurple,
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(16),
-                                topRight: Radius.circular(16),
-                                bottomLeft: Radius.circular(16),
-                              ),
-                            ),
-                            child: Text(
-                              msg['text']!,
-                              style: const TextStyle(
-                                color: textPurple,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        );
-                      } else {
-                        return Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            margin:
-                                const EdgeInsets.only(bottom: 16, right: 40),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Lumio AI',
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: const BoxDecoration(
-                                    color: cardColor,
-                                    borderRadius: BorderRadius.only(
-                                      topRight: Radius.circular(16),
-                                      bottomLeft: Radius.circular(16),
-                                      bottomRight: Radius.circular(16),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    msg['text']!,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                                if (msg['slide'] != null) ...[
-                                  const SizedBox(height: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF162525),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: const Color(0xFF1D453B),
-                                        width: 0.5,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.description_outlined,
-                                          color: accentNeon,
-                                          size: 12,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Page ${msg['slide']}',
-                                          style: const TextStyle(
-                                            color: accentNeon,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-          ),
- 
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: primaryPurple,
-                  ),
-                ),
+                  );
+                }).toList(),
               ),
+
+            const SizedBox(height: 28),
+
+            // SECTION 3 — Slide overview info
+            const Text(
+              'LECTURE INFO',
+              style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
             ),
- 
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: backgroundColor,
-            child: SafeArea(
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(14),
+              ),
               child: Row(
                 children: [
+                  const Icon(Icons.description_outlined, color: primaryPurple, size: 20),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E2E),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: TextField(
-                        controller: _chatController,
-                        // FIX 2: disable input when limit is 0
-                        enabled: !_isLoading && _questionsLeft > 0,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          lectureTitle,
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                         ),
-                        decoration: InputDecoration(
-                          hintText: _questionsLeft > 0
-                              ? 'Ask a question...'
-                              : 'Daily limit reached — come back tomorrow',
-                          hintStyle: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
-                          ),
-                          border: InputBorder.none,
+                        Text(
+                          slideText.isEmpty ? 'No text extracted' : '${slideText.split(' ').length} words extracted',
+                          style: const TextStyle(color: Colors.grey, fontSize: 11),
                         ),
-                        onSubmitted: (_) => _sendMessage(slideText),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () => _sendMessage(slideText),
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor:
-                          (_isLoading || _questionsLeft <= 0)
-                              ? Colors.grey
-                              : primaryPurple,
-                      foregroundColor: Colors.white,
-                      child: const Icon(Icons.send_rounded, size: 18),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToolButton({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3), width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Icon(icon, color: color, size: 26),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold)),
+                Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
- 

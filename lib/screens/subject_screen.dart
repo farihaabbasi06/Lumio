@@ -339,17 +339,15 @@ class SubjectScreen extends StatelessWidget {
                             subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
                             trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
                             onTap: () {
-  // Pull the text field directly from the individual document snapshot instance
-  final String lectureContent = doc['slideText'] ?? ''; 
-
+  final String lectureContent = doc['slideText'] ?? '';
   Navigator.pushNamed(
     context,
-    '/chat',
+    '/lecture-detail',
     arguments: {
       'lectureId': doc.id,
       'lectureTitle': title,
       'subjectId': subjectId,
-      'slideText': lectureContent, // Fixed! Uses the local parsed variable now.
+      'slideText': lectureContent,
     },
   );
 },
