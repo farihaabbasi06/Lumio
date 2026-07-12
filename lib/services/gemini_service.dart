@@ -101,31 +101,36 @@ $slideText
   }
 
   Future<String> generateMindMap(String slideText) async {
-    // Modify this if your service uses a different variable name for your API/model key setup
-    final prompt = """
-    Analyze the following lecture slide text. Group these lecture slides into main topic clusters suitable for a high-level mind map or study guide index.
-    
-    Return ONLY a valid JSON array of objects. Do not include markdown formatting, markdown blocks (like ```json), or explanatory text.
-    
-    Expected format:
-    [
-      {"topic": "Topic Name", "slideRange": "1-10", "color": "purple"},
-      {"topic": "Another Topic", "slideRange": "11-21", "color": "teal"}
-    ]
+  if (slideText.trim().isEmpty) return '[]';
 
-    Valid colors to assign are: "purple", "teal", "orange", "blue", "red", "green".
+  final prompt = """
+Analyze the following lecture slide text. Group these lecture slides into main topic clusters suitable for a high-level mind map.
 
-    Lecture Content:
-    $slideText
-    """;
+Return ONLY a valid JSON array. No markdown, no extra text.
 
-    // Call your existing generation/HTTP request logic here. 
-    // Example assuming your service has an internal _callGemini or direct post setup:
-    // return await _sendPromptToGemini(prompt); 
-    
-    // Placeholder: Implement matching your service's specific invoke/HTTP request layout:
-    throw UnimplementedError("Match this return statement to your existing gemini API post/response logic inside gemini_service.dart using the prompt variable above.");
+Expected format:
+[
+  {"topic": "Topic Name", "slideRange": "1-10", "color": "purple"},
+  {"topic": "Another Topic", "slideRange": "11-21", "color": "teal"}
+]
+
+Valid colors: "purple", "teal", "orange", "blue", "red", "green".
+
+Lecture Content:
+$slideText
+""";
+
+  try {
+    final raw = await _callGroqAPI(prompt);
+    String clean = raw.trim();
+    if (clean.contains('```')) {
+      clean = clean.replaceAll(RegExp(r'```json|```'), '').trim();
+    }
+    return clean;
+  } catch (e) {
+    return '[]';
   }
+}
   
   Future<int> getTodayCount() async {
     final prefs = await SharedPreferences.getInstance();

@@ -51,7 +51,15 @@ class MyApp extends StatelessWidget {
         '/chat': (context) => const ChatScreen(), // <-- 2. ADD THIS PATH MAP LINE
         '/flashcards': (context) => const FlashcardScreen(),
         '/weakspots': (context) => const WeakSpotsScreen(),
-        '/mindmap': (context) => const MindMapScreen(),
+        '/mindmap': (context) {
+  // Extract the map argument bundle dynamically from the modal route settings
+  final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ?? {};
+  
+  return MindMapScreen(
+    subjectId: args['subjectId'] ?? '',
+    lectureId: args['lectureId'] ?? '',
+  );
+},
       },
     );
   }

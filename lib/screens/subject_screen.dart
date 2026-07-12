@@ -147,14 +147,15 @@ class SubjectScreen extends StatelessWidget {
                           final latestDoc = lectureDocs.first;
                           final latestData = latestDoc.data() as Map<String, dynamic>;
                           Navigator.pushNamed(
-                            context,
-                            '/mindmap',
-                            arguments: {
-                              'lectureId': latestDoc.id,
-                              'lectureTitle': latestData['title'] ?? 'Lecture Mind Map',
-                              'slideText': latestData['slideText'] ?? '',
-                            },
-                          );
+  context,
+  '/mindmap',
+  arguments: {
+    'lectureId': latestDoc.id,
+    'subjectId': subjectId, // ADD THIS
+    'lectureTitle': latestData['title'] ?? 'Lecture Mind Map',
+    'slideText': latestData['slideText'] ?? '',
+  },
+);
                         }
                       : () {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -338,16 +339,20 @@ class SubjectScreen extends StatelessWidget {
                             subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
                             trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
                             onTap: () {
-                              Navigator.pushNamed(
-                                context,
-                                '/flashcards',
-                                arguments: {
-                                  'lectureId': doc.id,
-                                  'lectureTitle': title,
-                                  'subjectId': subjectId,
-                                },
-                              );
-                            },
+  // Pull the text field directly from the individual document snapshot instance
+  final String lectureContent = doc['slideText'] ?? ''; 
+
+  Navigator.pushNamed(
+    context,
+    '/chat',
+    arguments: {
+      'lectureId': doc.id,
+      'lectureTitle': title,
+      'subjectId': subjectId,
+      'slideText': lectureContent, // Fixed! Uses the local parsed variable now.
+    },
+  );
+},
                           ),
                         ),
                       );
