@@ -13,6 +13,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'screens/flashcard_screen.dart';
 import 'screens/weak_spots_screen.dart';
 import 'screens/mindmap_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/exam_predictor_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,24 +45,24 @@ class MyApp extends StatelessWidget {
       initialRoute: '/login',
       // Map out screen paths
       routes: {
-        '/login': (context) => const LoginScreen(),
-        '/signup': (context) => const SignupScreen(),
-        '/home': (context) => const HomeScreen(),
-        '/lecture-detail': (context) => const LectureDetailScreen(),
-        '/subject-detail': (context) => const SubjectScreen(),
-        '/chat': (context) => const ChatScreen(), // <-- 2. ADD THIS PATH MAP LINE
-        '/flashcards': (context) => const FlashcardScreen(),
-        '/weakspots': (context) => const WeakSpotsScreen(),
-        '/mindmap': (context) {
-  // Extract the map argument bundle dynamically from the modal route settings
-  final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ?? {};
-  
-  return MindMapScreen(
-    subjectId: args['subjectId'] ?? '',
-    lectureId: args['lectureId'] ?? '',
-  );
+  '/login': (context) => const LoginScreen(),
+  '/signup': (context) => const SignupScreen(),
+  '/home': (context) => const HomeScreen(),
+  '/lecture-detail': (context) => const LectureDetailScreen(),
+  '/subject-detail': (context) => const SubjectScreen(),
+  '/chat': (context) => const ChatScreen(),
+  '/flashcards': (context) => const FlashcardScreen(),
+  '/weakspots': (context) => const WeakSpotsScreen(),
+  '/profile': (context) => const ProfileScreen(),
+  '/exam-predictor': (context) => const ExamPredictorScreen(),
+  '/mindmap': (context) {
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ?? {};
+    return MindMapScreen(
+      subjectId: args['subjectId'] ?? '',
+      lectureId: args['lectureId'] ?? '',
+    );
+  },
 },
-      },
     );
   }
 }

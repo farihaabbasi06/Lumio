@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import 'exam_predictor_screen.dart';
 import 'global_flashcards_view.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const SubjectsDashboardView(),
     const GlobalFlashcardsView(), // Global flashcard dashboard view
     const ExamPredictorScreen(),  // Live AI dashboard layout hookup
-    const Center(child: Text('Profile Screen', style: TextStyle(color: Colors.white, fontSize: 18))),
+    const ProfileScreen(),
   ];
 
   @override
