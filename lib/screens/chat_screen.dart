@@ -21,7 +21,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
 
-  // NEW: user-selectable language for speech recognition. Defaults to English.
+  // User-selectable language for speech recognition. Defaults to English.
   String _currentLocaleId = 'en_US';
 
   // Custom Dark Theme Palette Colors
@@ -50,8 +50,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
-  // NEW: lets the user switch between English and Urdu recognition.
-  // Blocked while actively listening to avoid switching languages mid-speech.
+  // Lets the user switch between English and Urdu recognition.
   void _toggleLanguage() {
     if (_isListening) return;
     setState(() {
@@ -61,12 +60,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   void _toggleListening(String slideText) async {
     if (!_isListening) {
-      // 1. Initialize the speech service and request microphone permission
       bool available = await _speech.initialize(
         onStatus: (status) {
           if (status == 'notListening' || status == 'done') {
             setState(() => _isListening = false);
-            // Auto-send to Gemini when the user stops speaking
             final textToSend = _chatController.text.trim();
             if (textToSend.isNotEmpty) {
               _sendMessage(slideText);
@@ -79,7 +76,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       if (available) {
         setState(() => _isListening = true);
 
-        // 2. Start listening using whichever language the user picked
         await _speech.listen(
           onResult: (result) {
             setState(() {
@@ -88,21 +84,39 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           },
           localeId: _currentLocaleId,
           listenFor: const Duration(seconds: 30),
-          pauseFor: const Duration(seconds: 3),
+          pauseFor: const Duration(seconds: 3)
         );
       }
     } else {
-      // 3. Manually stop listening if the mic button is tapped while active
       await _speech.stop();
       setState(() => _isListening = false);
     }
+  }
+
+  // Helper function to build a consolidated prompt log of past chat history
+  String _buildConversationPrompt(String slideText, String currentQuery) {
+    StringBuffer promptBuffer = StringBuffer();
+    promptBuffer.writeln("You are an advanced AI study assistant. Here is the reference text context from the student's study slide document:\n=== CONTEXT START ===\n$slideText\n=== CONTEXT END ===\n");
+    promptBuffer.writeln("Using both the reference material above and our active conversation history, answer the user's latest message accurately.");
+    
+    // Append the last 6 turns of context to manage token sizes efficiently
+    final historySnapshot = _messages.where((m) => !m['isTyping']).toList();
+    final structuralLookback = historySnapshot.length > 6 ? historySnapshot.sublist(historySnapshot.length - 6) : historySnapshot;
+    
+    for (var historicMsg in structuralLookback) {
+      final role = historicMsg['sender'] == 'user' ? 'Student' : 'AI Assistant';
+      promptBuffer.writeln("$role: ${historicMsg['text']}");
+    }
+    
+    promptBuffer.writeln("Student: $currentQuery");
+    promptBuffer.write("AI Assistant: ");
+    return promptBuffer.toString();
   }
 
   void _sendMessage(String slideText) async {
     final userQuery = _chatController.text.trim();
     if (userQuery.isEmpty || _isAiTyping) return;
 
-    // 1. Clear textfield and post User Message immediately
     setState(() {
       _messages.add({
         'sender': 'user',
@@ -112,7 +126,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       _chatController.clear();
       _isAiTyping = true;
 
-      // 2. Insert a temporary message representing the typing indicator state
       _messages.add({
         'sender': 'ai',
         'text': '',
@@ -122,10 +135,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollToBottom();
 
     try {
-      // 3. Dispatch text data payload to your Gemini Service instance
-      final rawAiResponse = await _geminiService.askQuestion(slideText, userQuery);
+      // Build a multi-turn history-aware prompt instead of sending just the immediate query
+      final contextAwarePrompt = _buildConversationPrompt(slideText, userQuery);
+      final rawAiResponse = await _geminiService.askQuestion(slideText, contextAwarePrompt);
 
-      // 4. Regex Parser: Extract mentions of slide or page numbers
       String? extractedSlideNumber;
       final regExp = RegExp(r'(?:slide|page)\s*(\d+)', caseSensitive: false);
       final match = regExp.firstMatch(rawAiResponse);
@@ -133,9 +146,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         extractedSlideNumber = match.group(1);
       }
 
-      // 5. Remove typing element and insert authentic AI response payload
       setState(() {
-        _messages.removeLast(); // Drops the typing bubble
+        _messages.removeLast(); 
         _messages.add({
           'sender': 'ai',
           'text': rawAiResponse,
@@ -158,9 +170,32 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollToBottom();
   }
 
+  // Simple runtime parsing layout for processing bold text markers safely without crash dependencies
+  Widget _renderFormattedText(String text, TextStyle baseStyle) {
+    List<TextSpan> spans = [];
+    final regExp = RegExp(r'\*\*(.*?)\*\*');
+    int start = 0;
+
+    for (final match in regExp.allMatches(text)) {
+      if (match.start > start) {
+        spans.add(TextSpan(text: text.substring(start, match.start), style: baseStyle));
+      }
+      spans.add(TextSpan(
+        text: match.group(1),
+        style: baseStyle.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+      ));
+      start = match.end;
+    }
+
+    if (start < text.length) {
+      spans.add(TextSpan(text: text.substring(start), style: baseStyle));
+    }
+
+    return RichText(text: TextSpan(children: spans));
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Catch passed dynamic bundle string references from navigation parameters
     final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
     final String lectureTitle = args['lectureTitle'] ?? 'Document Chat';
     final String slideText = args['slideText'] ?? '';
@@ -181,7 +216,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
       body: Column(
         children: [
-          // 1. CHAT MESSAGE LIST STREAM AREA
           Expanded(
             child: _messages.isEmpty
                 ? Center(
@@ -220,7 +254,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                           ),
                         );
                       } else {
-                        // AI Bubble Layout
                         return Align(
                           alignment: Alignment.centerLeft,
                           child: Container(
@@ -240,9 +273,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                   ),
                                   child: msg['isTyping']
                                       ? const SizedBox(width: 40, height: 20, child: Center(child: TypingIndicator()))
-                                      : Text(msg['text'], style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                      : _renderFormattedText(msg['text'], const TextStyle(color: Colors.white, fontSize: 14, height: 1.4)),
                                 ),
-                                // DYNAMIC CHIP CONDITIONAL INJECTION
                                 if (!msg['isTyping'] && msg['slideNumber'] != null) ...[
                                   const SizedBox(height: 6),
                                   Container(
@@ -273,15 +305,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     },
                   ),
           ),
-
-          // 2. BOTTOM CONTROL ROW PANEL INTERFACE WITH VOICE INPUT + LANGUAGE TOGGLE
           Container(
             padding: const EdgeInsets.all(16),
             color: const Color(0xFF0D0D18),
             child: SafeArea(
               child: Row(
                 children: [
-                  // NEW: LANGUAGE TOGGLE BUTTON (EN / UR)
                   GestureDetector(
                     onTap: _toggleLanguage,
                     child: Container(
@@ -302,8 +331,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     ),
                   ),
                   const SizedBox(width: 8),
-
-                  // MICROPHONE ICON BUTTON
                   IconButton(
                     icon: Icon(
                       _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
@@ -350,7 +377,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 }
 
-// Separate Class for the Fluid Typing Dot Oscillator Animation Component
 class TypingIndicator extends StatefulWidget {
   const TypingIndicator({super.key});
 

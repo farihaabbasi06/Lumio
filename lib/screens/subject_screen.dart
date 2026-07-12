@@ -86,7 +86,6 @@ class SubjectScreen extends StatelessWidget {
                           ? () {
                               final latestDoc = lectureDocs.first;
                               final latestData = latestDoc.data() as Map<String, dynamic>;
-                              // FIXED: Replaced plain string with the expected parameter map block argument format
                               Navigator.pushNamed(
                                 context,
                                 '/flashcards',
@@ -114,7 +113,7 @@ class SubjectScreen extends StatelessWidget {
                       stream: FirebaseFirestore.instance
                           .collection('weakspots')
                           .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? 'anonymous_user')
-                          .where('subjectId', isEqualTo: subjectId) // Fixed: Filter grid counter by active subject
+                          .where('subjectId', isEqualTo: subjectId) 
                           .snapshots(),
                       builder: (context, weakSpotsSnapshot) {
                         final int weakSpotsCount = weakSpotsSnapshot.hasData ? weakSpotsSnapshot.data!.docs.length : 0;
@@ -140,39 +139,62 @@ class SubjectScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1228),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF3C3489), width: 0.5),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3C3489),
-                          borderRadius: BorderRadius.circular(10),
+                
+                // MIND MAP ROUTE ENTRY POINT CONTAINER
+                GestureDetector(
+                  onTap: lectureDocs.isNotEmpty
+                      ? () {
+                          final latestDoc = lectureDocs.first;
+                          final latestData = latestDoc.data() as Map<String, dynamic>;
+                          Navigator.pushNamed(
+                            context,
+                            '/mindmap',
+                            arguments: {
+                              'lectureId': latestDoc.id,
+                              'lectureTitle': latestData['title'] ?? 'Lecture Mind Map',
+                              'slideText': latestData['slideText'] ?? '',
+                            },
+                          );
+                        }
+                      : () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Upload a lecture first to view its mind map!')),
+                          );
+                        },
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1228),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF3C3489), width: 0.5),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3C3489),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.psychology_outlined, color: textPurple),
                         ),
-                        child: const Icon(Icons.psychology_outlined, color: textPurple),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Study entire subject with AI',
-                                style: TextStyle(color: Color(0xFFAFA9EC), fontWeight: FontWeight.bold, fontSize: 13)),
-                            SizedBox(height: 2),
-                            Text('Ask questions across all lectures',
-                                style: TextStyle(color: primaryPurple, fontSize: 11)),
-                          ],
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Study entire subject with AI',
+                                  style: TextStyle(color: Color(0xFFAFA9EC), fontWeight: FontWeight.bold, fontSize: 13)),
+                              SizedBox(height: 2),
+                              Text('View interactive topic mind map clusters',
+                                  style: TextStyle(color: primaryPurple, fontSize: 11)),
+                            ],
+                          ),
                         ),
-                      ),
-                      const Icon(Icons.auto_awesome, color: primaryPurple, size: 18),
-                    ],
+                        const Icon(Icons.auto_awesome, color: primaryPurple, size: 18),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -200,138 +222,137 @@ class SubjectScreen extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E1E2E),
                             borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.upload_file_rounded, color: Colors.grey),
                         ),
-                        child: const Icon(Icons.upload_file_rounded, color: Colors.grey),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Upload new lecture',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                            SizedBox(height: 2),
-                            Text('PDF files up to 50MB', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right_rounded, color: Colors.grey),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              if (snapshot.connectionState == ConnectionState.waiting)
-                const Center(child: CircularProgressIndicator(color: primaryPurple))
-              else if (lectureDocs.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32.0),
-                  child: Center(
-                    child: Text('No lectures uploaded yet.', style: TextStyle(color: Colors.grey)),
-                  ),
-                )
-              else
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: lectureDocs.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final doc = lectureDocs[index];
-                    final data = doc.data() as Map<String, dynamic>;
-                    final String title = data['title'] ?? 'L${index + 1}';
-                    final String summary = data['summary'] ?? 'No summary available';
-
-                    return GestureDetector(
-                      onLongPress: () {
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            backgroundColor: const Color(0xFF1A1A2E),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            title: const Text('Delete Lecture',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            content: Text(
-                              'Delete "$title"? This cannot be undone.',
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx),
-                                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                              ),
-                              TextButton(
-                                onPressed: () async {
-                                  Navigator.pop(ctx);
-                                  await FirebaseFirestore.instance
-                                      .collection('lectures')
-                                      .doc(doc.id)
-                                      .delete();
-                                  await FirebaseFirestore.instance
-                                      .collection('flashcards')
-                                      .where('lectureId', isEqualTo: doc.id)
-                                      .get()
-                                      .then((snap) {
-                                    for (var d in snap.docs) d.reference.delete();
-                                  });
-                                  await FirebaseFirestore.instance
-                                      .collection('weakspots')
-                                      .where('lectureId', isEqualTo: doc.id)
-                                      .get()
-                                      .then((snap) {
-                                    for (var d in snap.docs) d.reference.delete();
-                                  });
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Lecture deleted successfully'),
-                                        backgroundColor: Colors.redAccent,
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: const Text('Delete',
-                                    style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                              ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Upload new lecture',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                              SizedBox(height: 2),
+                              Text('PDF files up to 50MB', style: TextStyle(color: Colors.grey, fontSize: 11)),
                             ],
                           ),
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: cardColor,
-                          borderRadius: BorderRadius.circular(16),
                         ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          leading: CircleAvatar(
-                            backgroundColor: const Color(0xFF252542),
-                            foregroundColor: primaryPurple,
-                            child: Text('L${index + 1}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ),
-                          title: Text(title,
-                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-                          subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                          trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
-                          onTap: () {
-                            // FIXED: Appended structured map packet variables matching player layout initialization logic requirements
-                            Navigator.pushNamed(
-                              context,
-                              '/flashcards',
-                              arguments: {
-                                'lectureId': doc.id,
-                                'lectureTitle': title,
-                                'subjectId': subjectId,
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    );
-                  },
+                        const Icon(Icons.chevron_right_rounded, color: Colors.grey), // Moved safely inside children array!
+                      ],
+                    ),
+                  ),
                 ),
+                const SizedBox(height: 20),
+
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Center(child: CircularProgressIndicator(color: primaryPurple))
+                else if (lectureDocs.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32.0),
+                    child: Center(
+                      child: Text('No lectures uploaded yet.', style: TextStyle(color: Colors.grey)),
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: lectureDocs.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final doc = lectureDocs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final String title = data['title'] ?? 'L${index + 1}';
+                      final String summary = data['summary'] ?? 'No summary available';
+
+                      return GestureDetector(
+                        onLongPress: () {
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: const Color(0xFF1A1A2E),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              title: const Text('Delete Lecture',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              content: Text(
+                                'Delete "$title"? This cannot be undone.',
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    Navigator.pop(ctx);
+                                    await FirebaseFirestore.instance
+                                        .collection('lectures')
+                                        .doc(doc.id)
+                                        .delete();
+                                    await FirebaseFirestore.instance
+                                        .collection('flashcards')
+                                        .where('lectureId', isEqualTo: doc.id)
+                                        .get()
+                                        .then((snap) {
+                                      for (var d in snap.docs) d.reference.delete();
+                                    });
+                                    await FirebaseFirestore.instance
+                                        .collection('weakspots')
+                                        .where('lectureId', isEqualTo: doc.id)
+                                        .get()
+                                        .then((snap) {
+                                      for (var d in snap.docs) d.reference.delete();
+                                    });
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Lecture deleted successfully'),
+                                          backgroundColor: Colors.redAccent,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: const Text('Delete',
+                                      style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            leading: CircleAvatar(
+                              backgroundColor: const Color(0xFF252542),
+                              foregroundColor: primaryPurple,
+                              child: Text('L${index + 1}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                            title: Text(title,
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                            subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                            onTap: () {
+                              Navigator.pushNamed(
+                                context,
+                                '/flashcards',
+                                arguments: {
+                                  'lectureId': doc.id,
+                                  'lectureTitle': title,
+                                  'subjectId': subjectId,
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
               ],
             ),
           );
@@ -350,10 +371,11 @@ class SubjectScreen extends StatelessWidget {
     final GeminiService geminiService = GeminiService();
 
     try {
-      print("Starting background automated flashcard and prediction pipelines...");
+      print("Starting background automated flashcard, prediction, and mindmap pipelines...");
       
       String flashcardsJson = await geminiService.generateFlashcards(slideText);
       String examPredictionsJson = await geminiService.predictExamTopics(slideText);
+      String mindMapJson = await geminiService.generateMindMap(slideText);
       
       List<dynamic> examTopicsList = [];
       try {
@@ -362,9 +384,17 @@ class SubjectScreen extends StatelessWidget {
         print("Error parsing exam topics JSON: $e");
       }
 
+      List<dynamic> mindMapNodesList = [];
+      try {
+        mindMapNodesList = jsonDecode(mindMapJson);
+      } catch (e) {
+        print("Error parsing mind map JSON: $e");
+      }
+
       await FirebaseFirestore.instance.collection('lectures').doc(lectureId).update({
         'flashcards': flashcardsJson,
         'examTopics': examTopicsList,
+        'mindMapNodes': mindMapNodesList, 
       });
 
       var box = await Hive.openBox('flashcards');
@@ -385,7 +415,7 @@ class SubjectScreen extends StatelessWidget {
       }
 
       await batch.commit();
-      print("AI Content sync pipelines completed successfully!");
+      print("AI Content sync pipelines (including Mind Map) completed successfully!");
     } catch (e) {
       print("Background content generator execution failure error: $e");
     }
