@@ -8,7 +8,7 @@ class GeminiService {
 
   // Groq API call — replaces Gemini completely
   Future<String> _callGroqAPI(String prompt) async {
-    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    final apiKey = dotenv.env['GROK_API_KEY'] ?? '';
 
     final url = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
 
