@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../theme/app_colors.dart';
 import 'exam_predictor_screen.dart';
 import 'global_flashcards_view.dart';
 import 'profile_screen.dart';
@@ -17,36 +18,30 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  // Theme Colors matching your exact palette
-  static const backgroundColor = Color(0xFF0D0D18);
-  static const cardColor = Color(0xFF1A1A2E);
-  static const primaryPurple = Color(0xFF534AB7);
-  static const accentNeon = Color(0xFF5DCAA5); // Mint accent color for progress from prototype
-  static const textPurple = Color(0xFFCECBF6);
-
-  // Clean, singular definition for your application views
   final List<Widget> _pages = [
     const SubjectsDashboardView(),
-    const GlobalFlashcardsView(), // Global flashcard dashboard view
-    const ExamPredictorScreen(),  // Live AI dashboard layout hookup
+    const GlobalFlashcardsView(),
+    const ExamPredictorScreen(),
     const ProfileScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColors>()!;
+
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: colors.background,
       appBar: _currentIndex == 0
           ? AppBar(
-              backgroundColor: const Color(0xFF131324),
+              backgroundColor: colors.surface,
               elevation: 0,
-              title: const Text(
+              title: Text(
                 'Lumio Study',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 20),
               ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.logout_outlined, color: textPurple),
+                  icon: Icon(Icons.logout_outlined, color: colors.textPurple == Colors.white ? colors.primary : colors.textPurple),
                   onPressed: () async {
                     await AuthService().signOut();
                     if (context.mounted) {
@@ -58,8 +53,6 @@ class _HomeScreenState extends State<HomeScreen> {
             )
           : null,
       body: _pages[_currentIndex],
-      
-      // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -68,9 +61,9 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         },
         type: BottomNavigationBarType.fixed,
-        backgroundColor: const Color(0xFF131324),
-        selectedItemColor: primaryPurple,
-        unselectedItemColor: Colors.grey,
+        backgroundColor: colors.surface,
+        selectedItemColor: colors.primary,
+        unselectedItemColor: colors.textSecondary,
         showUnselectedLabels: true,
         selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
         unselectedLabelStyle: const TextStyle(fontSize: 11),
@@ -81,49 +74,46 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
         ],
       ),
-      
-      // Add New Subject Button
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
-              backgroundColor: primaryPurple,
+              backgroundColor: colors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              onPressed: () => _showAddSubjectDialog(context),
+              onPressed: () => _showAddSubjectDialog(context, colors),
               child: const Icon(Icons.add, size: 28),
             )
           : null,
     );
   }
 
-  // Dialog method to add new subjects to firestore
-  void _showAddSubjectDialog(BuildContext context) {
+  void _showAddSubjectDialog(BuildContext context, AppColors colors) {
     final textController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: cardColor,
+          backgroundColor: colors.card,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Text('New Subject', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: Text('New Subject', style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
           content: TextField(
             controller: textController,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: colors.textPrimary),
             decoration: InputDecoration(
               hintText: 'e.g., Mobile App Development',
-              hintStyle: const TextStyle(color: Colors.grey),
+              hintStyle: TextStyle(color: colors.textSecondary),
               filled: true,
-              fillColor: const Color(0xFF252542),
+              fillColor: colors.inputFill,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: primaryPurple,
+                backgroundColor: colors.primary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               onPressed: () async {
@@ -132,14 +122,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   await FirebaseFirestore.instance.collection('subjects').add({
                     'name': subjectName,
                     'userId': _currentUserId,
-                    'progress': 0.35, 
+                    'progress': 0.35,
                   });
                   if (context.mounted) {
                     Navigator.pop(context);
                   }
                 }
               },
-              child: const Text('Create', style: TextStyle(color: textPurple)),
+              child: Text('Create', style: TextStyle(color: colors.textPurple)),
             ),
           ],
         );
@@ -148,12 +138,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Separate Sub-Widget for the core Dashboard content grid view
 class SubjectsDashboardView extends StatelessWidget {
   const SubjectsDashboardView({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColors>()!;
     final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return StreamBuilder<QuerySnapshot>(
@@ -163,12 +153,12 @@ class SubjectsDashboardView extends StatelessWidget {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: _HomeScreenState.primaryPurple));
+          return Center(child: CircularProgressIndicator(color: colors.primary));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(
+          return Center(
             child: Text('No subjects added yet.\nTap + to start!',
-                textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 16)),
+                textAlign: TextAlign.center, style: TextStyle(color: colors.textSecondary, fontSize: 16)),
           );
         }
 
@@ -187,9 +177,69 @@ class SubjectsDashboardView extends StatelessWidget {
             final doc = subjectDocs[index];
             final data = doc.data() as Map<String, dynamic>;
             final String subjectName = data['name'] ?? 'Unnamed Subject';
-            final double progress = (data['progress'] ?? 0.0).toDouble();
+            double progress = (data['progress'] ?? 0.0).toDouble();
+            if (progress > 1.0) progress = progress / 100;
 
             return GestureDetector(
+              onLongPress: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: colors.card,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: Text('Delete Subject',
+                        style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
+                    content: Text(
+                      'Delete "$subjectName"? All lectures, flashcards and data inside will be permanently deleted.',
+                      style: TextStyle(color: colors.textSecondary),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+
+                          final lectures = await FirebaseFirestore.instance
+                              .collection('lectures')
+                              .where('subjectId', isEqualTo: doc.id)
+                              .get();
+
+                          for (var lecture in lectures.docs) {
+                            final flashcards = await FirebaseFirestore.instance
+                                .collection('flashcards')
+                                .where('lectureId', isEqualTo: lecture.id)
+                                .get();
+                            for (var f in flashcards.docs) f.reference.delete();
+
+                            final weakspots = await FirebaseFirestore.instance
+                                .collection('weakspots')
+                                .where('lectureId', isEqualTo: lecture.id)
+                                .get();
+                            for (var w in weakspots.docs) w.reference.delete();
+
+                            await lecture.reference.delete();
+                          }
+
+                          await FirebaseFirestore.instance.collection('subjects').doc(doc.id).delete();
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('Subject deleted successfully'),
+                                backgroundColor: colors.danger,
+                              ),
+                            );
+                          }
+                        },
+                        child: Text('Delete', style: TextStyle(color: colors.danger, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+              },
               onTap: () {
                 Navigator.pushNamed(
                   context,
@@ -200,8 +250,15 @@ class SubjectsDashboardView extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _HomeScreenState.cardColor,
+                  color: colors.card,
                   borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(12),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,17 +270,17 @@ class SubjectsDashboardView extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF252542),
+                            color: colors.inputFill,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.folder_open_rounded, color: _HomeScreenState.primaryPurple, size: 24),
+                          child: Icon(Icons.folder_open_rounded, color: colors.primary, size: 24),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           subjectName,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                          style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                         ),
                       ],
                     ),
@@ -233,9 +290,9 @@ class SubjectsDashboardView extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Progress', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                            Text('Progress', style: TextStyle(color: colors.textSecondary, fontSize: 11)),
                             Text('${(progress * 100).toInt()}%',
-                                style: const TextStyle(color: _HomeScreenState.accentNeon, fontSize: 11, fontWeight: FontWeight.bold)),
+                                style: TextStyle(color: colors.accent, fontSize: 11, fontWeight: FontWeight.bold)),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -243,8 +300,8 @@ class SubjectsDashboardView extends StatelessWidget {
                           borderRadius: BorderRadius.circular(6),
                           child: LinearProgressIndicator(
                             value: progress,
-                            backgroundColor: const Color(0xFF252542),
-                            valueColor: const AlwaysStoppedAnimation<Color>(_HomeScreenState.accentNeon),
+                            backgroundColor: colors.inputFill,
+                            valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
                             minHeight: 5,
                           ),
                         ),

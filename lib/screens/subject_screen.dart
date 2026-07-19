@@ -8,37 +8,33 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
-import 'package:hive_flutter/hive_flutter.dart'; // Import Hive for local offline caching
-import '../services/gemini_service.dart';     // Import your custom Gemini service
+import 'package:hive_flutter/hive_flutter.dart';
+import '../services/gemini_service.dart';
+import '../widgets/app_widgets.dart';
+import '../theme/app_colors.dart';
 
 class SubjectScreen extends StatelessWidget {
   const SubjectScreen({super.key});
 
-  static const backgroundColor = Color(0xFF0D0D18);
-  static const cardColor = Color(0xFF1A1A2E);
-  static const primaryPurple = Color(0xFF534AB7);
-  static const accentNeon = Color(0xFF5DCAA5);
-  static const orangeWarn = Color(0xFFEF9F27);
-  static const textPurple = Color(0xFFCECBF6);
-
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColors>()!;
     final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
     final String subjectId = args['subjectId'] ?? '';
     final String subjectName = args['subjectName'] ?? 'Subject View';
 
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF131324),
+        backgroundColor: colors.surface,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.grey),
+          icon: Icon(Icons.arrow_back_rounded, color: colors.textSecondary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           subjectName,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -77,10 +73,8 @@ class SubjectScreen extends StatelessWidget {
                   mainAxisSpacing: 10,
                   childAspectRatio: 1.6,
                   children: [
-                    _buildStatCard('$lectureCount', 'Lectures', primaryPurple),
-                    _buildStatCard(totalSlides > 0 ? '$totalSlides' : '0', 'Slides', accentNeon),
-                    
-                    // 1. INTERACTIVE FLASHCARD CARD
+                    _buildStatCard('$lectureCount', 'Lectures', colors.primary, colors),
+                    _buildStatCard(totalSlides > 0 ? '$totalSlides' : '0', 'Slides', colors.accent, colors),
                     GestureDetector(
                       onTap: lectureDocs.isNotEmpty
                           ? () {
@@ -102,18 +96,17 @@ class SubjectScreen extends StatelessWidget {
                               );
                             },
                       child: _buildStatCard(
-                        lectureDocs.isNotEmpty ? 'Review' : '0', 
-                        'Flashcards', 
-                        orangeWarn,
+                        lectureDocs.isNotEmpty ? 'Review' : '0',
+                        'Flashcards',
+                        colors.warning,
+                        colors,
                       ),
                     ),
-                    
-                    // 2. INTERACTIVE WEAK SPOTS CARD WITH LIVE STREAM COUNT
                     StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('weakspots')
                           .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? 'anonymous_user')
-                          .where('subjectId', isEqualTo: subjectId) 
+                          .where('subjectId', isEqualTo: subjectId)
                           .snapshots(),
                       builder: (context, weakSpotsSnapshot) {
                         final int weakSpotsCount = weakSpotsSnapshot.hasData ? weakSpotsSnapshot.data!.docs.length : 0;
@@ -123,39 +116,31 @@ class SubjectScreen extends StatelessWidget {
                             Navigator.pushNamed(
                               context,
                               '/weakspots',
-                              arguments: {
-                                'subjectId': subjectId,
-                              },
+                              arguments: {'subjectId': subjectId},
                             );
                           },
-                          child: _buildStatCard(
-                            '$weakSpotsCount', 
-                            'Weak spots', 
-                            const Color(0xFFE24B4A),
-                          ),
+                          child: _buildStatCard('$weakSpotsCount', 'Weak spots', colors.danger, colors),
                         );
                       },
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                
-                // MIND MAP ROUTE ENTRY POINT CONTAINER
                 GestureDetector(
                   onTap: lectureDocs.isNotEmpty
                       ? () {
                           final latestDoc = lectureDocs.first;
                           final latestData = latestDoc.data() as Map<String, dynamic>;
                           Navigator.pushNamed(
-  context,
-  '/mindmap',
-  arguments: {
-    'lectureId': latestDoc.id,
-    'subjectId': subjectId, // ADD THIS
-    'lectureTitle': latestData['title'] ?? 'Lecture Mind Map',
-    'slideText': latestData['slideText'] ?? '',
-  },
-);
+                            context,
+                            '/mindmap',
+                            arguments: {
+                              'lectureId': latestDoc.id,
+                              'subjectId': subjectId,
+                              'lectureTitle': latestData['title'] ?? 'Lecture Mind Map',
+                              'slideText': latestData['slideText'] ?? '',
+                            },
+                          );
                         }
                       : () {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -165,9 +150,9 @@ class SubjectScreen extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E1228),
+                      color: colors.primary.withAlpha(25),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF3C3489), width: 0.5),
+                      border: Border.all(color: colors.primary.withAlpha(90), width: 0.5),
                     ),
                     child: Row(
                       children: [
@@ -175,45 +160,45 @@ class SubjectScreen extends StatelessWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF3C3489),
+                            color: colors.primary.withAlpha(60),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.psychology_outlined, color: textPurple),
+                          child: Icon(Icons.psychology_outlined, color: colors.textPurple == Colors.white ? colors.primary : colors.textPurple),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Study entire subject with AI',
-                                  style: TextStyle(color: Color(0xFFAFA9EC), fontWeight: FontWeight.bold, fontSize: 13)),
-                              SizedBox(height: 2),
+                                  style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(height: 2),
                               Text('View interactive topic mind map clusters',
-                                  style: TextStyle(color: primaryPurple, fontSize: 11)),
+                                  style: TextStyle(color: colors.primary, fontSize: 11)),
                             ],
                           ),
                         ),
-                        const Icon(Icons.auto_awesome, color: primaryPurple, size: 18),
+                        Icon(Icons.auto_awesome, color: colors.primary, size: 18),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                const Text(
+                Text(
                   'LECTURES',
-                  style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                 ),
                 const SizedBox(height: 12),
 
                 GestureDetector(
-                  onTap: () => _pickAndProcessPdf(context, subjectId),
+                  onTap: () => _pickAndProcessPdf(context, subjectId, colors),
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: cardColor,
+                      color: colors.card,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF2A2A3E), width: 1),
+                      border: Border.all(color: colors.border, width: 1),
                     ),
                     child: Row(
                       children: [
@@ -221,24 +206,24 @@ class SubjectScreen extends StatelessWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E1E2E),
+                            color: colors.inputFill,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.upload_file_rounded, color: Colors.grey),
+                          child: Icon(Icons.upload_file_rounded, color: colors.textSecondary),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Upload new lecture',
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                              SizedBox(height: 2),
-                              Text('PDF files up to 50MB', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                  style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(height: 2),
+                              Text('PDF files up to 50MB', style: TextStyle(color: colors.textSecondary, fontSize: 11)),
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right_rounded, color: Colors.grey), // Moved safely inside children array!
+                        Icon(Icons.chevron_right_rounded, color: colors.textSecondary),
                       ],
                     ),
                   ),
@@ -246,13 +231,12 @@ class SubjectScreen extends StatelessWidget {
                 const SizedBox(height: 20),
 
                 if (snapshot.connectionState == ConnectionState.waiting)
-                  const Center(child: CircularProgressIndicator(color: primaryPurple))
+                  Center(child: CircularProgressIndicator(color: colors.primary))
                 else if (lectureDocs.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32.0),
-                    child: Center(
-                      child: Text('No lectures uploaded yet.', style: TextStyle(color: Colors.grey)),
-                    ),
+                  const LumioEmptyState(
+                    icon: Icons.upload_file_rounded,
+                    title: 'No lectures yet',
+                    subtitle: 'Tap upload to add your first lecture PDF',
                   )
                 else
                   ListView.separated(
@@ -271,26 +255,23 @@ class SubjectScreen extends StatelessWidget {
                           showDialog(
                             context: context,
                             builder: (ctx) => AlertDialog(
-                              backgroundColor: const Color(0xFF1A1A2E),
+                              backgroundColor: colors.card,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              title: const Text('Delete Lecture',
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              title: Text('Delete Lecture',
+                                  style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
                               content: Text(
                                 'Delete "$title"? This cannot be undone.',
-                                style: const TextStyle(color: Colors.grey),
+                                style: TextStyle(color: colors.textSecondary),
                               ),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                                  child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
                                 ),
                                 TextButton(
                                   onPressed: () async {
                                     Navigator.pop(ctx);
-                                    await FirebaseFirestore.instance
-                                        .collection('lectures')
-                                        .doc(doc.id)
-                                        .delete();
+                                    await FirebaseFirestore.instance.collection('lectures').doc(doc.id).delete();
                                     await FirebaseFirestore.instance
                                         .collection('flashcards')
                                         .where('lectureId', isEqualTo: doc.id)
@@ -307,15 +288,14 @@ class SubjectScreen extends StatelessWidget {
                                     });
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Lecture deleted successfully'),
-                                          backgroundColor: Colors.redAccent,
+                                        SnackBar(
+                                          content: const Text('Lecture deleted successfully'),
+                                          backgroundColor: colors.danger,
                                         ),
                                       );
                                     }
                                   },
-                                  child: const Text('Delete',
-                                      style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                  child: Text('Delete', style: TextStyle(color: colors.danger, fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),
@@ -323,34 +303,32 @@ class SubjectScreen extends StatelessWidget {
                         },
                         child: Container(
                           decoration: BoxDecoration(
-                            color: cardColor,
+                            color: colors.card,
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                             leading: CircleAvatar(
-                              backgroundColor: const Color(0xFF252542),
-                              foregroundColor: primaryPurple,
-                              child: Text('L${index + 1}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              backgroundColor: colors.inputFill,
+                              foregroundColor: colors.primary,
+                              child: Text('L${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             ),
-                            title: Text(title,
-                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-                            subtitle: Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                            title: Text(title, style: TextStyle(color: colors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
+                            subtitle: Text(summary, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+                            trailing: Icon(Icons.chevron_right_rounded, color: colors.textSecondary),
                             onTap: () {
-  final String lectureContent = doc['slideText'] ?? '';
-  Navigator.pushNamed(
-    context,
-    '/lecture-detail',
-    arguments: {
-      'lectureId': doc.id,
-      'lectureTitle': title,
-      'subjectId': subjectId,
-      'slideText': lectureContent,
-    },
-  );
-},
+                              final String lectureContent = doc['slideText'] ?? '';
+                              Navigator.pushNamed(
+                                context,
+                                '/lecture-detail',
+                                arguments: {
+                                  'lectureId': doc.id,
+                                  'lectureTitle': title,
+                                  'subjectId': subjectId,
+                                  'slideText': lectureContent,
+                                },
+                              );
+                            },
                           ),
                         ),
                       );
@@ -370,16 +348,16 @@ class SubjectScreen extends StatelessWidget {
 
   Future<void> _generateAndSaveFlashcardsBackground(String lectureId, String slideText) async {
     if (slideText.trim().isEmpty) return;
-    
+
     final GeminiService geminiService = GeminiService();
 
     try {
       print("Starting background automated flashcard, prediction, and mindmap pipelines...");
-      
+
       String flashcardsJson = await geminiService.generateFlashcards(slideText);
       String examPredictionsJson = await geminiService.predictExamTopics(slideText);
       String mindMapJson = await geminiService.generateMindMap(slideText);
-      
+
       List<dynamic> examTopicsList = [];
       try {
         examTopicsList = jsonDecode(examPredictionsJson);
@@ -397,7 +375,7 @@ class SubjectScreen extends StatelessWidget {
       await FirebaseFirestore.instance.collection('lectures').doc(lectureId).update({
         'flashcards': flashcardsJson,
         'examTopics': examTopicsList,
-        'mindMapNodes': mindMapNodesList, 
+        'mindMapNodes': mindMapNodesList,
       });
 
       var box = await Hive.openBox('flashcards');
@@ -424,7 +402,7 @@ class SubjectScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _pickAndProcessPdf(BuildContext context, String subjectId) async {
+  Future<void> _pickAndProcessPdf(BuildContext context, String subjectId, AppColors colors) async {
     try {
       FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -443,19 +421,19 @@ class SubjectScreen extends StatelessWidget {
         barrierDismissible: false,
         builder: (context) => PopScope(
           canPop: false,
-          child: const AlertDialog(
-            backgroundColor: Color(0xFF1A1A2E),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+          child: AlertDialog(
+            backgroundColor: colors.card,
+            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(color: primaryPurple),
-                SizedBox(height: 20),
+                CircularProgressIndicator(color: colors.primary),
+                const SizedBox(height: 20),
                 Text("Reading your slides...",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                SizedBox(height: 6),
+                    style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
                 Text("AI is scanning your document...",
-                    style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12)),
               ],
             ),
           ),
@@ -487,6 +465,18 @@ class SubjectScreen extends StatelessWidget {
 
       await _generateAndSaveFlashcardsBackground(lectureDocRef.id, bigCombinedText);
 
+      final allLectures = await FirebaseFirestore.instance
+          .collection('lectures')
+          .where('subjectId', isEqualTo: subjectId)
+          .get();
+
+      final openedLectures = allLectures.docs.where((doc) => doc.data()['opened'] == true).length;
+
+      final total = allLectures.docs.length;
+      final progress = total > 0 ? (openedLectures / total) : 0.0;
+
+      await FirebaseFirestore.instance.collection('subjects').doc(subjectId).update({'progress': progress});
+
       if (!context.mounted) return;
       Navigator.pop(context);
 
@@ -497,22 +487,22 @@ class SubjectScreen extends StatelessWidget {
       if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: colors.danger),
         );
       }
     }
   }
 
-  Widget _buildStatCard(String value, String label, Color accentColor) {
+  Widget _buildStatCard(String value, String label, Color accentColor, AppColors colors) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(color: colors.card, borderRadius: BorderRadius.circular(14)),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(value, style: TextStyle(color: accentColor, fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+          Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
         ],
       ),
     );

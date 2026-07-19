@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../widgets/app_widgets.dart';
+import '../theme/app_colors.dart';
 
 class MindMapScreen extends StatelessWidget {
   final String subjectId;
@@ -11,71 +13,66 @@ class MindMapScreen extends StatelessWidget {
     required this.lectureId,
   });
 
-  Color _getNodeColor(String colorName) {
+  Color _getNodeColor(String colorName, AppColors colors) {
     switch (colorName.toLowerCase()) {
-      case 'purple': return const Color(0xFF534AB7);
-      case 'blue': return const Color(0xFF3A86FF);
-      case 'teal': return const Color(0xFF5DCAA5);
-      case 'amber': return const Color(0xFFFFB703);
-      case 'rose': return const Color(0xFFFB5607);
-      default: return const Color(0xFF534AB7);
+      case 'purple':
+        return colors.primary;
+      case 'blue':
+        return const Color(0xFF3A86FF);
+      case 'teal':
+        return colors.accent;
+      case 'amber':
+        return const Color(0xFFFFB703);
+      case 'rose':
+        return const Color(0xFFFB5607);
+      default:
+        return colors.primary;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColors>()!;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D18),
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF131324),
+        backgroundColor: colors.surface,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Lecture Mind Map',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.grey),
+          icon: Icon(Icons.arrow_back_rounded, color: colors.textSecondary),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance
-            .collection('lectures')
-            .doc(lectureId)
-            .get(),
+        future: FirebaseFirestore.instance.collection('lectures').doc(lectureId).get(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFF534AB7)));
+            return Center(child: CircularProgressIndicator(color: colors.primary));
           }
 
-          // SAFE CHECK: If anything goes wrong or document doesn't exist, fail gracefully without crashing
           if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: Text("Lecture data not found.", style: TextStyle(color: Colors.grey)));
+            return Center(child: Text("Lecture data not found.", style: TextStyle(color: colors.textSecondary)));
           }
 
           final lectureData = snapshot.data!.data() as Map<String, dynamic>?;
           if (lectureData == null) {
-            return const Center(child: Text("No data found.", style: TextStyle(color: Colors.grey)));
+            return Center(child: Text("No data found.", style: TextStyle(color: colors.textSecondary)));
           }
 
-          // SAFE CHECK: Safeguard against missing or legacy fields
           final List<dynamic> nodes = lectureData['mindMapNodes'] ?? [];
           final String slideText = lectureData['slideText'] ?? '';
           final String lectureTitle = lectureData['title'] ?? 'Lecture';
 
-          // If this is an old lecture without mindmap data, show a friendly notice
           if (nodes.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.hub_outlined, size: 48, color: Colors.grey.withOpacity(0.5)),
-                  const SizedBox(height: 12),
-                  const Text("No mind map nodes generated yet.", style: TextStyle(color: Colors.white, fontSize: 14)),
-                  const SizedBox(height: 4),
-                  const Text("Upload a new file to see this feature!", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                ],
-              ),
+            return const LumioEmptyState(
+              icon: Icons.hub_outlined,
+              title: 'No mind map yet',
+              subtitle: 'Upload a new lecture to see topic clusters',
             );
           }
 
@@ -93,7 +90,7 @@ class MindMapScreen extends StatelessWidget {
                 final node = nodes[index] as Map<String, dynamic>;
                 final String topic = node['topic'] ?? 'Unknown Topic';
                 final String range = node['slideRange'] ?? 'N/A';
-                final Color themeColor = _getNodeColor(node['color'] ?? 'purple');
+                final Color themeColor = _getNodeColor(node['color'] ?? 'purple', colors);
 
                 return GestureDetector(
                   onTap: () {
@@ -112,9 +109,9 @@ class MindMapScreen extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A2E),
+                      color: colors.card,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: themeColor.withOpacity(0.3), width: 1),
+                      border: Border.all(color: themeColor.withAlpha(80), width: 1),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -123,7 +120,7 @@ class MindMapScreen extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: themeColor.withOpacity(0.15),
+                            color: themeColor.withAlpha(38),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -135,7 +132,7 @@ class MindMapScreen extends StatelessWidget {
                           topic,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: colors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
                         ),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,

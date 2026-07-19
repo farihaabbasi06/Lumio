@@ -1,62 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/app_widgets.dart';
+import '../theme/app_colors.dart';
 
 class ExamPredictorScreen extends StatelessWidget {
   const ExamPredictorScreen({super.key});
 
-  // Matching your exact Lumio application color palette
-  static const backgroundColor = Color(0xFF0D0D18);
-  static const cardColor = Color(0xFF1A1A2E);
-  static const primaryPurple = Color(0xFF534AB7);
-  static const textPurple = Color(0xFFCECBF6);
-  
-  static const redDanger = Color(0xFFE24B4A);
-  static const orangeWarn = Color(0xFFEF9F27);
-  static const accentNeon = Color(0xFF5DCAA5); // Mint color
-
-  // Helper method to dynamically pick indicator colors based on percentage
-  Color _getImportanceColor(int percentage) {
-    if (percentage >= 80) return redDanger;
-    if (percentage >= 50) return orangeWarn;
-    return accentNeon;
+  Color _getImportanceColor(int percentage, AppColors colors) {
+    if (percentage >= 80) return colors.danger;
+    if (percentage >= 50) return colors.warning;
+    return colors.accent;
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColors>()!;
     final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF131324),
+        backgroundColor: colors.surface,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Exam AI Predictor',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // Fetches all lectures uploaded across any subjects for this specific logged-in user
-        stream: FirebaseFirestore.instance
-            .collection('lectures')
-            .snapshots(),
+        stream: FirebaseFirestore.instance.collection('lectures').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: primaryPurple));
+            return const LumioLoader(message: 'Loading predictions...');
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 'No data analyzed yet.\nUpload your lecture slides first!',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 14),
+                style: TextStyle(color: colors.textSecondary, fontSize: 14),
               ),
             );
           }
 
-          // Combine all predicted topics from all lecture documents into a single flat list
           List<Map<String, dynamic>> allPredictedTopics = [];
 
           for (var doc in snapshot.data!.docs) {
@@ -76,19 +64,13 @@ class ExamPredictorScreen extends StatelessWidget {
             }
           }
 
-          // Sort everything globally by highest probability percentage first
           allPredictedTopics.sort((a, b) => (b['percentage'] as int).compareTo(a['percentage'] as int));
 
           if (allPredictedTopics.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24.0),
-                child: Text( // <-- Fixed from print: to child:
-                  'Processing predictions...\nIf you just uploaded a file, give the AI a few seconds to update.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontSize: 14),
-                ),
-              ),
+            return const LumioEmptyState(
+              icon: Icons.track_changes_rounded,
+              title: 'No predictions yet',
+              subtitle: 'Upload a lecture to see exam topic predictions',
             );
           }
 
@@ -101,20 +83,26 @@ class ExamPredictorScreen extends StatelessWidget {
               final int percentage = item['percentage'];
               final String reason = item['reason'];
               final String sourceLecture = item['lectureTitle'];
-              final Color statusColor = _getImportanceColor(percentage);
+              final Color statusColor = _getImportanceColor(percentage, colors);
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: cardColor,
+                  color: colors.card,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF22223B), width: 1),
+                  border: Border.all(color: colors.border, width: 1),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(12),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Row for Topic Name and Percentage Text
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,12 +113,12 @@ class ExamPredictorScreen extends StatelessWidget {
                             children: [
                               Text(
                                 topicName,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 'Source: $sourceLecture',
-                                style: const TextStyle(color: textPurple, fontSize: 11),
+                                style: TextStyle(color: colors.textSecondary, fontSize: 11),
                               ),
                             ],
                           ),
@@ -143,23 +131,19 @@ class ExamPredictorScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    
-                    // Linear progress gauge bar colored dynamically
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: percentage / 100.0,
-                        backgroundColor: const Color(0xFF252542),
+                        backgroundColor: colors.inputFill,
                         valueColor: AlwaysStoppedAnimation<Color>(statusColor),
                         minHeight: 6,
                       ),
                     ),
                     const SizedBox(height: 12),
-                    
-                    // AI breakdown analysis string snippet
                     Text(
                       reason,
-                      style: const TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
+                      style: TextStyle(color: colors.textSecondary, fontSize: 12, height: 1.4),
                     ),
                   ],
                 ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+import '../theme/app_colors.dart';
+import '../providers/theme_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -15,12 +18,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _totalFlashcards = 0;
   bool _isLoading = true;
 
-  static const backgroundColor = Color(0xFF0D0D18);
-  static const cardColor = Color(0xFF1A1A2E);
-  static const primaryPurple = Color(0xFF534AB7);
-  static const accentNeon = Color(0xFF5DCAA5);
-  static const textPurple = Color(0xFFCECBF6);
-
   @override
   void initState() {
     super.initState();
@@ -32,22 +29,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (uid.isEmpty) return;
 
     try {
-      // Load user data from Firestore
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
-      // Count total subjects
       final subjectsSnap = await FirebaseFirestore.instance
           .collection('subjects')
           .where('userId', isEqualTo: uid)
           .get();
 
-      // Count total flashcards
-      final flashcardsSnap = await FirebaseFirestore.instance
-          .collection('flashcards')
-          .get();
+      final flashcardsSnap = await FirebaseFirestore.instance.collection('flashcards').get();
 
       if (mounted) {
         setState(() {
@@ -62,18 +51,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _signOut() async {
+  Future<void> _signOut(AppColors colors) async {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: cardColor,
+        backgroundColor: colors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Logout', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to logout?', style: TextStyle(color: Colors.grey)),
+        title: Text('Logout', style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to logout?', style: TextStyle(color: colors.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
           ),
           TextButton(
             onPressed: () async {
@@ -83,7 +72,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
               }
             },
-            child: const Text('Logout', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            child: Text('Logout', style: TextStyle(color: colors.danger, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -92,34 +81,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColors>()!;
+    final themeProvider = context.watch<ThemeProvider>();
     final user = FirebaseAuth.instance.currentUser;
     final String name = _userData?['name'] ?? user?.displayName ?? 'Student';
     final String email = _userData?['email'] ?? user?.email ?? '';
     final String university = _userData?['university'] ?? 'University';
 
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF131324),
+        backgroundColor: colors.surface,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Profile',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         automaticallyImplyLeading: false,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: primaryPurple))
+          ? Center(child: CircularProgressIndicator(color: colors.primary))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-
-                  // Avatar + name section
                   const SizedBox(height: 16),
                   CircleAvatar(
                     radius: 44,
-                    backgroundColor: primaryPurple,
+                    backgroundColor: colors.primary,
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'S',
                       style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.bold),
@@ -128,106 +117,135 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 14),
                   Text(
                     name,
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: colors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     university,
-                    style: const TextStyle(color: accentNeon, fontSize: 13),
+                    style: TextStyle(color: colors.accent, fontSize: 13),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     email,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
                   ),
                   const SizedBox(height: 28),
 
-                  // Stats row
                   Row(
                     children: [
-                      Expanded(child: _buildStatCard('$_totalSubjects', 'Subjects', primaryPurple)),
+                      Expanded(child: _buildStatCard('$_totalSubjects', 'Subjects', colors.primary, colors)),
                       const SizedBox(width: 12),
-                      Expanded(child: _buildStatCard('$_totalFlashcards', 'Flashcards', accentNeon)),
+                      Expanded(child: _buildStatCard('$_totalFlashcards', 'Flashcards', colors.accent, colors)),
                     ],
                   ),
                   const SizedBox(height: 28),
 
-                  // Info section
-                  const Align(
+                  Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'ACCOUNT INFO',
-                      style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      'APPEARANCE',
+                      style: TextStyle(color: colors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildInfoTile(Icons.person_outline_rounded, 'Full Name', name),
-                  const SizedBox(height: 8),
-                  _buildInfoTile(Icons.school_outlined, 'University', university),
-                  const SizedBox(height: 8),
-                  _buildInfoTile(Icons.email_outlined, 'Email', email),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    decoration: BoxDecoration(color: colors.card, borderRadius: BorderRadius.circular(14)),
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: Icon(
+                        themeProvider.isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                        color: colors.primary,
+                      ),
+                      title: Text('Dark Mode', style: TextStyle(color: colors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
+                      value: themeProvider.isDarkMode,
+                      activeColor: colors.primary,
+                      onChanged: (_) => themeProvider.toggleTheme(),
+                    ),
+                  ),
                   const SizedBox(height: 28),
 
-                  // Logout button
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'ACCOUNT INFO',
+                      style: TextStyle(color: colors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildInfoTile(Icons.person_outline_rounded, 'Full Name', name, colors),
+                  const SizedBox(height: 8),
+                  _buildInfoTile(Icons.school_outlined, 'University', university, colors),
+                  const SizedBox(height: 8),
+                  _buildInfoTile(Icons.email_outlined, 'Email', email, colors),
+                  const SizedBox(height: 28),
+
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2A1015),
-                        foregroundColor: Colors.redAccent,
+                        backgroundColor: colors.danger.withAlpha(25),
+                        foregroundColor: colors.danger,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
-                          side: const BorderSide(color: Colors.redAccent, width: 0.5),
+                          side: BorderSide(color: colors.danger, width: 0.5),
                         ),
                       ),
                       icon: const Icon(Icons.logout_rounded, size: 18),
                       label: const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      onPressed: _signOut,
+                      onPressed: () => _signOut(colors),
                     ),
                   ),
 
                   const SizedBox(height: 20),
 
-                  // App version
-                  const Text('Lumio v1.0.0', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                  Text('Lumio v1.0.0', style: TextStyle(color: colors.textSecondary, fontSize: 11)),
                 ],
               ),
             ),
     );
   }
 
-  Widget _buildStatCard(String value, String label, Color color) {
+  Widget _buildStatCard(String value, String label, Color color, AppColors colors) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(color: colors.card, borderRadius: BorderRadius.circular(14)),
       child: Column(
         children: [
           Text(value, style: TextStyle(color: color, fontSize: 26, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 12)),
         ],
       ),
     );
   }
 
-  Widget _buildInfoTile(IconData icon, String label, String value) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(14)),
-      child: Row(
-        children: [
-          Icon(icon, color: primaryPurple, size: 20),
-          const SizedBox(width: 12),
-          Column(
+  Widget _buildInfoTile(IconData icon, String label, String value, AppColors colors) {
+  return Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(color: colors.card, borderRadius: BorderRadius.circular(14)),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: colors.primary, size: 20),
+        const SizedBox(width: 12),
+        Expanded(                                   // ✅ gives Column a bounded width
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-              Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+              Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+              Text(
+                value,
+                style: TextStyle(color: colors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
+                maxLines: 2,                         // ✅ optional: cap at 2 lines
+                overflow: TextOverflow.ellipsis,      // ✅ adds "..." if still too long
+              ),
             ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 }
