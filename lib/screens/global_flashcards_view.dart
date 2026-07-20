@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
 
 class GlobalFlashcardsView extends StatelessWidget {
@@ -8,6 +9,7 @@ class GlobalFlashcardsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
+    final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -20,7 +22,10 @@ class GlobalFlashcardsView extends StatelessWidget {
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('lectures').snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('lectures')
+            .where('userId', isEqualTo: currentUserId)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator(color: colors.primary));

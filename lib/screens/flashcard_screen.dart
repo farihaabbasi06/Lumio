@@ -63,9 +63,11 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
         return;
       }
 
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       final snapshot = await FirebaseFirestore.instance
           .collection('flashcards')
           .where('lectureId', isEqualTo: lectureId)
+          .where('userId', isEqualTo: uid)
           .get();
 
       if (snapshot.docs.isNotEmpty) {

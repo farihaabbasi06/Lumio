@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../theme/app_colors.dart';
 import '../providers/theme_provider.dart';
 
@@ -36,7 +37,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .where('userId', isEqualTo: uid)
           .get();
 
-      final flashcardsSnap = await FirebaseFirestore.instance.collection('flashcards').get();
+      final flashcardsSnap = await FirebaseFirestore.instance
+          .collection('flashcards')
+          .where('userId', isEqualTo: uid)
+          .get();
 
       if (mounted) {
         setState(() {
@@ -67,6 +71,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
+              final box = await Hive.openBox('flashcards');
+              await box.clear();
               await FirebaseAuth.instance.signOut();
               if (mounted) {
                 Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
