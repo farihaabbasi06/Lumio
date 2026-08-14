@@ -125,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   await FirebaseFirestore.instance.collection('subjects').add({
                     'name': subjectName,
                     'userId': _currentUserId,
-                    'progress': 0.35,
+                    'progress': 0.0,
                   });
                   if (context.mounted) {
                     Navigator.pop(context);
