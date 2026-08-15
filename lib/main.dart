@@ -21,6 +21,11 @@ import 'screens/splash_screen.dart';
 import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 
+
+import 'screens/exam_sim_setup_screen.dart';
+import 'screens/exam_sim_screen.dart';
+import 'screens/exam_sim_result_screen.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
@@ -72,6 +77,11 @@ class MyApp extends StatelessWidget {
             lectureId: args['lectureId'] ?? '',
           );
         },
+
+
+        '/exam-sim-setup': (context) => const ExamSimSetupScreen(),
+'/exam-sim': (context) => const ExamSimScreen(),
+'/exam-sim-result': (context) => const ExamSimResultScreen(),
       },
     );
   }

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
 
+
 class LectureDetailScreen extends StatefulWidget {
   const LectureDetailScreen({super.key});
 
@@ -164,6 +165,16 @@ class _LectureDetailScreenState extends State<LectureDetailScreen> {
                     },
                   ),
                 ),
+
+
+
+
+                
+
+
+
+
+
                 _buildToolButton(
                   colors: colors,
                   icon: Icons.hub_rounded,
@@ -310,6 +321,8 @@ class _LectureDetailScreenState extends State<LectureDetailScreen> {
       ),
     );
   }
+
+  
 
   Widget _buildToolButton({
     required AppColors colors,
