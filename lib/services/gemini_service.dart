@@ -6,9 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class GeminiService {
   static const int dailyLimit = 50;
-  static int _currentKeyIndex = 0;
+  static int _currentGroqKeyIndex = 0;
 
-  List<String> _loadKeys() {
+  // ─── LOAD GROQ KEYS ───────────────────────────────────────────────
+  List<String> _loadGroqKeys() {
     final keys = <String>[];
     for (int i = 1; i <= 5; i++) {
       final k = dotenv.env['GROQ_API_KEY_$i'] ?? '';
@@ -21,9 +22,10 @@ class GeminiService {
     return keys;
   }
 
-  Future<String> _callGroqAPI(String prompt, {int maxTokens = 1024}) async {
-    final keys = _loadKeys();
-    if (keys.isEmpty) return "API Error: No API keys found in .env";
+  // ─── CALL GROQ ────────────────────────────────────────────────────
+  Future<String?> _tryGroq(String prompt, int maxTokens) async {
+    final keys = _loadGroqKeys();
+    if (keys.isEmpty) return null;
 
     final url = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
     final body = jsonEncode({
@@ -35,10 +37,8 @@ class GeminiService {
       "max_tokens": maxTokens,
     });
 
-    String lastError = "API Error: Unknown failure";
-
     for (int attempt = 0; attempt < keys.length; attempt++) {
-      final keyIndex = (_currentKeyIndex + attempt) % keys.length;
+      final keyIndex = (_currentGroqKeyIndex + attempt) % keys.length;
       final apiKey = keys[keyIndex];
 
       try {
@@ -52,32 +52,124 @@ class GeminiService {
         );
 
         if (response.statusCode == 200) {
-          _currentKeyIndex = keyIndex;
+          _currentGroqKeyIndex = keyIndex;
           final data = jsonDecode(response.body);
-          return data['choices']?[0]?['message']?['content'] ?? "No answer generated.";
+          return data['choices']?[0]?['message']?['content'];
         }
 
-        if (response.statusCode == 429) {
-          lastError = "QUOTA_ERROR: Rate limit reached.";
-          debugPrint('Groq key #${keyIndex + 1} rate-limited, trying next...');
+        if (response.statusCode == 429 || response.statusCode == 401) {
+          debugPrint('Groq key #${keyIndex + 1} failed, trying next...');
           continue;
         }
 
-        if (response.statusCode == 401) {
-          lastError = "API Error: Invalid API Key (key #${keyIndex + 1})";
-          debugPrint('Groq key #${keyIndex + 1} invalid, trying next...');
-          continue;
-        }
-
-        final error = jsonDecode(response.body);
-        return "API Error: ${error['error']?['message'] ?? response.statusCode}";
+        return null;
       } catch (e) {
-        lastError = "API Error: ${e.toString()}";
         continue;
       }
     }
+    return null; // all Groq keys exhausted
+  }
 
-    return lastError;
+  // ─── CALL COHERE ──────────────────────────────────────────────────
+  Future<String?> _tryCohere(String prompt, int maxTokens) async {
+    final apiKey = dotenv.env['COHERE_API_KEY'] ?? '';
+    if (apiKey.isEmpty) return null;
+
+    try {
+      final url = Uri.parse('https://api.cohere.com/v2/chat');
+final body = jsonEncode({
+  "model": "command-r",
+  "messages": [
+    {"role": "user", "content": prompt}
+  ],
+  "max_tokens": maxTokens,
+});
+
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $apiKey",
+        },
+        body: body,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final text = data['message']?['content']?[0]?['text']?.toString().trim();
+        debugPrint('Cohere responded successfully');
+        return text;
+      }
+
+      debugPrint('Cohere failed: ${response.statusCode}');
+      return null;
+    } catch (e) {
+      debugPrint('Cohere error: $e');
+      return null;
+    }
+  }
+
+  // ─── CALL MISTRAL ─────────────────────────────────────────────────
+  Future<String?> _tryMistral(String prompt, int maxTokens) async {
+    final apiKey = dotenv.env['MISTRAL_API_KEY'] ?? '';
+    if (apiKey.isEmpty) return null;
+
+    try {
+      final url =
+          Uri.parse('https://api.mistral.ai/v1/chat/completions');
+      final body = jsonEncode({
+        "model": "mistral-small-latest",
+        "messages": [
+          {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": maxTokens,
+      });
+
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $apiKey",
+        },
+        body: body,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final text = data['choices']?[0]?['message']?['content']?.toString().trim();
+        debugPrint('Mistral responded successfully');
+        return text;
+      }
+
+      debugPrint('Mistral failed: ${response.statusCode}');
+      return null;
+    } catch (e) {
+      debugPrint('Mistral error: $e');
+      return null;
+    }
+  }
+
+  // ─── MASTER API CALL — tries Groq → Cohere → Mistral ─────────────
+  Future<String> _callAPI(String prompt, {int maxTokens = 1024}) async {
+    // 1. Try all Groq keys first
+    final groqResult = await _tryGroq(prompt, maxTokens);
+    if (groqResult != null && groqResult.isNotEmpty) return groqResult;
+
+    debugPrint('All Groq keys exhausted — trying Cohere...');
+
+    // 2. Try Cohere
+    final cohereResult = await _tryCohere(prompt, maxTokens);
+    if (cohereResult != null && cohereResult.isNotEmpty) return cohereResult;
+
+    debugPrint('Cohere exhausted — trying Mistral...');
+
+    // 3. Try Mistral
+    final mistralResult = await _tryMistral(prompt, maxTokens);
+    if (mistralResult != null && mistralResult.isNotEmpty) return mistralResult;
+
+    // All platforms exhausted
+    return "API Error: All AI services are currently unavailable. Please try again in a few minutes.";
   }
 
   // ─── DAILY LIMIT ──────────────────────────────────────────────────
@@ -129,8 +221,8 @@ Give a thorough, well-explained answer (at least 3-5 sentences). Use examples wh
 At the end add the source like this: [Source: Page X]
 """;
 
-      final result = await _callGroqAPI(prompt);
-      if (!result.startsWith("QUOTA_ERROR") && !result.startsWith("API Error")) {
+      final result = await _callAPI(prompt);
+      if (!result.startsWith("API Error")) {
         await incrementCount();
       }
       return result;
@@ -156,7 +248,7 @@ $slideText
 """;
 
     try {
-      final raw = await _callGroqAPI(prompt);
+      final raw = await _callAPI(prompt);
       String clean = raw.trim();
       if (clean.contains('```')) clean = clean.replaceAll(RegExp(r'```json|```'), '').trim();
       return clean;
@@ -182,7 +274,7 @@ $slideText
 """;
 
     try {
-      final raw = await _callGroqAPI(prompt);
+      final raw = await _callAPI(prompt);
       String clean = raw.trim();
       if (clean.contains('```')) clean = clean.replaceAll(RegExp(r'```json|```'), '').trim();
       return clean;
@@ -210,7 +302,7 @@ $slideText
 """;
 
     try {
-      final raw = await _callGroqAPI(prompt);
+      final raw = await _callAPI(prompt);
       String clean = raw.trim();
       if (clean.contains('```')) clean = clean.replaceAll(RegExp(r'```json|```'), '').trim();
       return clean;
@@ -219,10 +311,8 @@ $slideText
     }
   }
 
-  // ─── SMART SUMMARIZE — for large multi-lecture content ─────────────
-  // Splits text into chunks, summarizes each, returns combined summary
+  // ─── SMART SUMMARIZE ──────────────────────────────────────────────
   Future<String> _summarizeLargeText(String text) async {
-    // Split into chunks of max 3000 words each
     final words = text.split(' ');
     const chunkSize = 3000;
     final chunks = <String>[];
@@ -232,9 +322,8 @@ $slideText
       chunks.add(words.sublist(i, end).join(' '));
     }
 
-    debugPrint('Summarizing ${chunks.length} chunks for exam generation...');
+    debugPrint('Summarizing ${chunks.length} chunks...');
 
-    // Summarize each chunk
     final summaries = <String>[];
     for (int i = 0; i < chunks.length; i++) {
       final prompt = """
@@ -245,8 +334,8 @@ Write at least 300 words covering all major topics.
 Lecture chunk ${i + 1} of ${chunks.length}:
 ${chunks[i]}
 """;
-      final summary = await _callGroqAPI(prompt, maxTokens: 600);
-      if (!summary.startsWith('API Error') && !summary.startsWith('QUOTA_ERROR')) {
+      final summary = await _callAPI(prompt, maxTokens: 600);
+      if (!summary.startsWith('API Error')) {
         summaries.add('=== Lecture Section ${i + 1} ===\n$summary');
       }
     }
@@ -264,16 +353,13 @@ ${chunks[i]}
     int shortMarks = 5,
     int longMarks = 10,
   }) async {
-
-    // SMART HANDLING — if text is too large (20+ lectures), summarize first
     String contentToUse = slideText;
     final wordCount = slideText.split(' ').length;
 
     if (wordCount > 15000) {
-      // Too large — summarize each section first then generate from summaries
       debugPrint('Content too large ($wordCount words) — summarizing first...');
       contentToUse = await _summarizeLargeText(slideText);
-      debugPrint('Summarization complete. Generating exam from summary...');
+      debugPrint('Summarization complete.');
     }
 
     final prompt = """
@@ -282,7 +368,6 @@ You are an experienced university professor. Generate a complete exam paper from
 Format: $format
 Return ONLY valid JSON. No markdown, no extra text.
 
-JSON format:
 {
   "mcqs": [
     {
@@ -312,15 +397,14 @@ Generate exactly:
 - $shortCount short questions ($shortMarks marks each)
 - $longCount long questions ($longMarks marks each)
 
-Make questions from ALL topics covered in the content — not just the first lecture.
-Cover a wide range of topics to test comprehensive understanding.
+Make questions from ALL topics. Cover a wide range.
 
 Lecture Content:
 $contentToUse
 """;
 
     try {
-      final raw = await _callGroqAPI(prompt, maxTokens: 4000);
+      final raw = await _callAPI(prompt, maxTokens: 4000);
       String clean = raw.trim();
       if (clean.contains('```')) clean = clean.replaceAll(RegExp(r'```json|```'), '').trim();
       final parsed = jsonDecode(clean);
@@ -345,7 +429,6 @@ $contentToUse
     required List<Map<String, dynamic>> longQuestions,
     required List<String> longAnswers,
   }) async {
-    // Grade MCQs automatically — no AI needed
     int mcqScore = 0;
     List<Map<String, dynamic>> mcqResults = [];
     for (int i = 0; i < mcqs.length; i++) {
@@ -363,50 +446,54 @@ $contentToUse
       });
     }
 
-    // For grading use summarized content if too large
     String gradingContent = slideText;
     if (slideText.split(' ').length > 15000) {
       gradingContent = await _summarizeLargeText(slideText);
     }
 
     final gradingPrompt = """
-You are a university professor grading an exam.
+You are a strict university professor grading an exam.
 Return ONLY valid JSON. No markdown, no extra text.
+
+IMPORTANT GRADING RULES:
+- If a student's answer is empty, blank, or says NO ANSWER PROVIDED → award 0 marks, no exceptions
+- If a student's answer is partially correct → award partial marks only
+- If a student's answer is completely correct → award full marks
+- Never give marks for empty or missing answers under any circumstances
 
 {
   "short_results": [
     {
       "question": "question text",
       "user_answer": "student answer",
-      "marks_awarded": 4,
+      "marks_awarded": 0,
       "max_marks": 5,
-      "feedback": "Good answer but missed X point"
+      "feedback": "No answer provided"
     }
   ],
   "long_results": [
     {
       "question": "question text",
       "user_answer": "student answer",
-      "marks_awarded": 8,
+      "marks_awarded": 0,
       "max_marks": 10,
-      "feedback": "Well explained but could improve on Y"
+      "feedback": "No answer provided"
     }
   ],
   "overall_feedback": "Overall performance summary"
 }
-
 Lecture Content (answer key):
 $gradingContent
 
 Short Questions:
-${List.generate(shortQuestions.length, (i) => "Q${i + 1}: ${shortQuestions[i]['question']}\nAnswer: ${i < shortAnswers.length ? shortAnswers[i] : 'No answer'}\nMax: ${shortQuestions[i]['marks']} marks").join('\n\n')}
+${List.generate(shortQuestions.length, (i) => "Q${i + 1}: ${shortQuestions[i]['question']}\nAnswer: ${i < shortAnswers.length && shortAnswers[i].trim().isNotEmpty ? shortAnswers[i] : 'NO ANSWER PROVIDED - AWARD 0 MARKS'}\nMax: ${shortQuestions[i]['marks']} marks").join('\n\n')}
 
 Long Questions:
-${List.generate(longQuestions.length, (i) => "Q${i + 1}: ${longQuestions[i]['question']}\nAnswer: ${i < longAnswers.length ? longAnswers[i] : 'No answer'}\nMax: ${longQuestions[i]['marks']} marks").join('\n\n')}
+${List.generate(longQuestions.length, (i) => "Q${i + 1}: ${longQuestions[i]['question']}\nAnswer: ${i < longAnswers.length && longAnswers[i].trim().isNotEmpty ? longAnswers[i] : 'NO ANSWER PROVIDED - AWARD 0 MARKS'}\nMax: ${longQuestions[i]['marks']} marks").join('\n\n')}
 """;
 
     try {
-      final raw = await _callGroqAPI(gradingPrompt, maxTokens: 2000);
+      final raw = await _callAPI(gradingPrompt, maxTokens: 2000);
       String clean = raw.trim();
       if (clean.contains('```')) clean = clean.replaceAll(RegExp(r'```json|```'), '').trim();
       final gradingResult = jsonDecode(clean) as Map<String, dynamic>;

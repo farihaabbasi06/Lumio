@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
     
+  path_provider: ^2.1.2
   provider: ^6.1.2
   shared_preferences: ^2.2.2
   cupertino_icons: ^1.0.8
@@ -47,6 +48,9 @@ dependencies:
   go_router: ^16.0.0
   flutter_dotenv: ^6.0.1
   hive: ^2.2.3
+  docx_to_text: ^1.0.1
+  google_mlkit_text_recognition: ^0.13.0
+  image_picker: ^1.0.7
 
 dev_dependencies:
   flutter_test:

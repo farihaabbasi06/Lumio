@@ -12,6 +12,10 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../services/gemini_service.dart';
 import '../widgets/app_widgets.dart';
 import '../theme/app_colors.dart';
+import 'dart:io';
+import 'package:docx_to_text/docx_to_text.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:path_provider/path_provider.dart';
 
 class SubjectScreen extends StatelessWidget {
   const SubjectScreen({super.key});
@@ -404,89 +408,289 @@ class SubjectScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _pickAndProcessPdf(BuildContext context, String subjectId, AppColors colors) async {
-    try {
-      FilePickerResult? result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-        withData: true,
-      );
 
-      if (result == null || result.files.single.bytes == null) return;
 
-      String fileName = result.files.single.name;
-      Uint8List fileBytes = result.files.single.bytes!;
+// Replace your entire _pickAndProcessPdf function with this
+// No other changes needed in subject_screen.dart
 
+Future<void> _pickAndProcessPdf(
+    BuildContext context, String subjectId, AppColors colors) async {
+  try {
+    FilePickerResult? result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'docx', 'doc', 'txt', 'jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+
+    if (result == null || result.files.single.bytes == null) return;
+
+    String fileName = result.files.single.name;
+    Uint8List fileBytes = result.files.single.bytes!;
+    String fileExtension = fileName.split('.').last.toLowerCase();
+
+    // ── Professional size warning (not rejection) ──────────────────
+    final fileSizeMB = fileBytes.length / (1024 * 1024);
+    if (fileSizeMB > 25) {
       if (!context.mounted) return;
-      showDialog(
+      final proceed = await showDialog<bool>(
         context: context,
-        barrierDismissible: false,
-        builder: (context) => PopScope(
-          canPop: false,
-          child: AlertDialog(
-            backgroundColor: colors.card,
-            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(color: colors.primary),
-                const SizedBox(height: 20),
-                Text("Reading your slides...",
-                    style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                Text("AI is scanning your document...",
-                    style: TextStyle(color: colors.textSecondary, fontSize: 12)),
-              ],
+        builder: (ctx) => AlertDialog(
+          backgroundColor: colors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Large File Detected',
+              style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
+          content: Text(
+            'This file is ${fileSizeMB.toStringAsFixed(1)}MB. Processing may take 2-3 minutes. Continue?',
+            style: TextStyle(color: colors.textSecondary, fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Continue',
+                  style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+
+    if (!context.mounted) return;
+
+    // ── Progress state ─────────────────────────────────────────────
+    final progressNotifier = ValueNotifier<String>('Preparing...');
+    final pageNotifier = ValueNotifier<String>('');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: colors.card,
+          shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(20))),
+          content: ValueListenableBuilder<String>(
+            valueListenable: progressNotifier,
+            builder: (_, status, __) => ValueListenableBuilder<String>(
+              valueListenable: pageNotifier,
+              builder: (_, pageInfo, __) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: colors.primary),
+                  const SizedBox(height: 20),
+                  Text(
+                    status,
+                    style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (pageInfo.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      pageInfo,
+                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  Text(
+                    fileExtension.toUpperCase(),
+                    style: TextStyle(
+                        color: colors.primary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      );
+      ),
+    );
+
+    String bigCombinedText = "";
+    int totalPagesCount = 1;
+
+    // ── PDF with page-by-page progress ────────────────────────────
+    if (fileExtension == 'pdf') {
+      progressNotifier.value = 'Opening PDF...';
+      await Future.delayed(const Duration(milliseconds: 100));
 
       PdfDocument document = PdfDocument(inputBytes: fileBytes);
-      String bigCombinedText = "";
+      totalPagesCount = document.pages.count;
 
       for (int i = 0; i < document.pages.count; i++) {
-        String text = PdfTextExtractor(document).extractText(startPageIndex: i, endPageIndex: i);
+        // Update progress for every page
+        pageNotifier.value = 'Reading page ${i + 1} of $totalPagesCount...';
+        
+        // Allow UI to update
+        await Future.delayed(const Duration(milliseconds: 10));
+
+        String text = PdfTextExtractor(document)
+            .extractText(startPageIndex: i, endPageIndex: i);
         bigCombinedText += text;
       }
-      int totalPagesCount = document.pages.count;
+
       document.dispose();
 
+      // Fallback for image-based PDFs
       if (bigCombinedText.trim().isEmpty) {
+        progressNotifier.value = 'Scanning image-based PDF...';
+        pageNotifier.value = 'Using AI vision to read content';
+        await Future.delayed(const Duration(milliseconds: 100));
         bigCombinedText = await _extractTextViaHTTP(fileBytes);
       }
+    }
 
-      DocumentReference lectureDocRef = await FirebaseFirestore.instance.collection('lectures').add({
-        'subjectId': subjectId,
-        'userId': FirebaseAuth.instance.currentUser?.uid ?? '',
-        'title': fileName.replaceAll('.pdf', ''),
-        'summary': '$totalPagesCount pages processed',
-        'pdfUrl': '',
-        'slideText': bigCombinedText,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      await _generateAndSaveFlashcardsBackground(
-        lectureDocRef.id,
-        bigCombinedText,
-        FirebaseAuth.instance.currentUser?.uid ?? '',
-      );
-
-      if (!context.mounted) return;
-      Navigator.pop(context);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lecture uploaded successfully! AI features generated.')),
-      );
-    } catch (e) {
-      if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: colors.danger),
-        );
+    // ── WORD ──────────────────────────────────────────────────────
+    else if (fileExtension == 'docx' || fileExtension == 'doc') {
+      progressNotifier.value = 'Reading Word document...';
+      pageNotifier.value = 'Extracting all text content';
+      await Future.delayed(const Duration(milliseconds: 200));
+      try {
+        bigCombinedText = docxToText(fileBytes);
+        totalPagesCount = 1;
+        if (bigCombinedText.trim().isEmpty) {
+          bigCombinedText = "Word document uploaded but no readable text found.";
+        }
+      } catch (e) {
+        bigCombinedText = "Error reading Word file: ${e.toString()}";
       }
     }
+
+    // ── TXT ───────────────────────────────────────────────────────
+    else if (fileExtension == 'txt') {
+      progressNotifier.value = 'Reading text file...';
+      pageNotifier.value = 'Loading content';
+      await Future.delayed(const Duration(milliseconds: 200));
+      try {
+        bigCombinedText = String.fromCharCodes(fileBytes);
+        totalPagesCount = 1;
+      } catch (e) {
+        bigCombinedText = "Error reading text file: ${e.toString()}";
+      }
+    }
+
+    // ── IMAGES ────────────────────────────────────────────────────
+    else if (fileExtension == 'jpg' ||
+        fileExtension == 'jpeg' ||
+        fileExtension == 'png') {
+      progressNotifier.value = 'Scanning image with OCR...';
+      pageNotifier.value = 'Reading text from image';
+      await Future.delayed(const Duration(milliseconds: 200));
+      try {
+        final tempDir = await getTemporaryDirectory();
+        final tempFile = File('${tempDir.path}/temp_image.$fileExtension');
+        await tempFile.writeAsBytes(fileBytes);
+
+        final inputImage = InputImage.fromFile(tempFile);
+        final textRecognizer = TextRecognizer();
+        final recognizedText = await textRecognizer.processImage(inputImage);
+        await textRecognizer.close();
+
+        bigCombinedText = recognizedText.text;
+        totalPagesCount = 1;
+        await tempFile.delete();
+
+        if (bigCombinedText.trim().isEmpty) {
+          bigCombinedText =
+              "No text found in image. This may be a diagram or graph with no readable text.";
+        }
+      } catch (e) {
+        bigCombinedText = "Error reading image: ${e.toString()}";
+      }
+    }
+
+    // ── UNSUPPORTED ───────────────────────────────────────────────
+    else {
+      bigCombinedText = "Unsupported file format: $fileExtension";
+    }
+
+    // ── Save to Firestore ─────────────────────────────────────────
+    progressNotifier.value = 'Saving to database...';
+    pageNotifier.value = '$totalPagesCount page(s) extracted';
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    final cleanTitle = fileName
+        .replaceAll('.pdf', '')
+        .replaceAll('.docx', '')
+        .replaceAll('.doc', '')
+        .replaceAll('.txt', '')
+        .replaceAll('.jpg', '')
+        .replaceAll('.jpeg', '')
+        .replaceAll('.png', '');
+
+    DocumentReference lectureDocRef =
+        await FirebaseFirestore.instance.collection('lectures').add({
+      'subjectId': subjectId,
+      'userId': FirebaseAuth.instance.currentUser?.uid ?? '',
+      'title': cleanTitle,
+      'summary': '$totalPagesCount page(s) · ${fileExtension.toUpperCase()}',
+      'pdfUrl': '',
+      'slideText': bigCombinedText,
+      'fileType': fileExtension,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // ── Generate AI features ──────────────────────────────────────
+    progressNotifier.value = 'Generating AI features...';
+    pageNotifier.value = 'Creating flashcards, exam topics, mind map';
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    await _generateAndSaveFlashcardsBackground(
+      lectureDocRef.id,
+      bigCombinedText,
+      FirebaseAuth.instance.currentUser?.uid ?? '',
+    );
+
+    // ── Update subject progress ───────────────────────────────────
+    final allLectures = await FirebaseFirestore.instance
+        .collection('lectures')
+        .where('subjectId', isEqualTo: subjectId)
+        .get();
+    final openedCount =
+        allLectures.docs.where((d) => d.data()['opened'] == true).length;
+    final total = allLectures.docs.length;
+    final progress = total > 0 ? openedCount / total : 0.0;
+    await FirebaseFirestore.instance
+        .collection('subjects')
+        .doc(subjectId)
+        .update({'progress': progress});
+
+    progressNotifier.dispose();
+    pageNotifier.dispose();
+
+    if (!context.mounted) return;
+    Navigator.pop(context);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            '${fileExtension.toUpperCase()} uploaded! $totalPagesCount page(s) processed.'),
+        backgroundColor: const Color(0xFF1D9E75),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  } catch (e) {
+    if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: colors.danger,
+        ),
+      );
+    }
   }
+}
+
 
   Widget _buildStatCard(String value, String label, IconData icon, Color accentColor, AppColors colors) {
     return Container(
